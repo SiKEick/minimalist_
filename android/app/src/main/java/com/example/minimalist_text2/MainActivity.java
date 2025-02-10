@@ -1,5 +1,6 @@
 package com.example.minimalist_text2;
 
+import android.app.AppOpsManager;
 import android.app.usage.UsageStats;
 import android.app.usage.UsageStatsManager;
 import android.content.Context;
@@ -41,6 +42,10 @@ public class MainActivity extends FlutterActivity {
                     @Override
                     public void onMethodCall(MethodCall call, MethodChannel.Result result) {
                         if (call.method.equals("getUsageStats")) {
+                            if (!isUsageAccessGranted()) {
+                                result.error("PERMISSION_DENIED", "Usage Access permission is not granted", null);
+                                return;
+                            }
                             List<Map<String, Object>> usageStats = getUsageStats();
                             result.success(usageStats);
                         } else {
@@ -51,48 +56,95 @@ public class MainActivity extends FlutterActivity {
         );
     }
 
+    private boolean isUsageAccessGranted() {
+        AppOpsManager appOps = (AppOpsManager) getSystemService(Context.APP_OPS_SERVICE);
+        int mode = appOps.checkOpNoThrow(AppOpsManager.OPSTR_GET_USAGE_STATS,
+                android.os.Process.myUid(), getPackageName());
+        return mode == AppOpsManager.MODE_ALLOWED;
+    }
+
     @RequiresApi(api = Build.VERSION_CODES.LOLLIPOP)
     private List<Map<String, Object>> getUsageStats() {
         UsageStatsManager usageStatsManager = (UsageStatsManager) getSystemService(Context.USAGE_STATS_SERVICE);
         PackageManager packageManager = getPackageManager();
         Calendar calendar = Calendar.getInstance();
-        long endTime = calendar.getTimeInMillis();
-        calendar.add(Calendar.DAY_OF_YEAR, -1);
+
+        long endTime = calendar.getTimeInMillis(); // Current time
+        calendar.set(Calendar.HOUR_OF_DAY, 0);
+        calendar.set(Calendar.MINUTE, 0);
+        calendar.set(Calendar.SECOND, 0);
+        calendar.set(Calendar.MILLISECOND, 0);
         long startTime = calendar.getTimeInMillis();
 
-        List<UsageStats> usageStatsList = usageStatsManager.queryUsageStats(UsageStatsManager.INTERVAL_DAILY, startTime, endTime);
-        List<Map<String, Object>> eventList = new ArrayList<>();
+        List<UsageStats> usageStatsList = usageStatsManager.queryUsageStats(
+                UsageStatsManager.INTERVAL_DAILY, startTime, endTime);
 
-        for (UsageStats usageStats : usageStatsList) {
-            Map<String, Object> appUsage = new HashMap<>();
+        Log.d("DEBUG_RAW_USAGE_STATS", "------ Raw Usage Data ------");
+
+        // Store all occurrences of each app
+        Map<String, List<Long>> usageTimeMap = new HashMap<>();
+
+        for (UsageStats stats : usageStatsList) {
+            long foregroundTime = stats.getTotalTimeInForeground();
+            String packageName = stats.getPackageName();
+
+            if (foregroundTime > 0) {
+                Log.d("DEBUG_RAW_USAGE_STATS", "App: " + packageName + " - Foreground Time: " + foregroundTime);
+
+                // Add usage time to the list for that package
+                usageTimeMap.putIfAbsent(packageName, new ArrayList<>());
+                usageTimeMap.get(packageName).add(foregroundTime);
+            }
+        }
+
+        // Prepare the final result
+        List<Map<String, Object>> finalUsageList = new ArrayList<>();
+
+        for (Map.Entry<String, List<Long>> entry : usageTimeMap.entrySet()) {
+            String packageName = entry.getKey();
+            List<Long> timeList = entry.getValue();
+
+            // Calculate the average time for this app
+            long total = 0;
+            for (long time : timeList) {
+                total += time;
+            }
+            long averageTime = total / timeList.size(); // Taking the average
+
             try {
-                ApplicationInfo appInfo = packageManager.getApplicationInfo(usageStats.getPackageName(), 0);
-                String appName = (String) packageManager.getApplicationLabel(appInfo);
-                appUsage.put("appName", appName);
+                ApplicationInfo appInfo = packageManager.getApplicationInfo(packageName, 0);
+                if ((appInfo.flags & ApplicationInfo.FLAG_SYSTEM) != 0) {
+                    continue; // Skip system apps
+                }
 
-                // Fetch app icon and convert to Base64
+                String appName = packageManager.getApplicationLabel(appInfo).toString();
                 Drawable icon = packageManager.getApplicationIcon(appInfo);
-                Bitmap bitmap = drawableToBitmap(icon);
-                String iconBase64 = bitmapToBase64(bitmap);
-                appUsage.put("icon", iconBase64);
+                String iconBase64 = bitmapToBase64(drawableToBitmap(icon));
 
-                // Debugging: Print the first 20 characters of the Base64 string
-                System.out.println("Base64 Icon for " + appName + ": " +
-                        iconBase64.substring(0, Math.min(20, iconBase64.length())) + "...");
+                Map<String, Object> appUsage = new HashMap<>();
+                appUsage.put("appName", appName);
+                appUsage.put("icon", iconBase64);
+                appUsage.put("totalTimeInForeground", averageTime);
+
+                finalUsageList.add(appUsage);
 
             } catch (PackageManager.NameNotFoundException e) {
-                appUsage.put("appName", usageStats.getPackageName());
-                appUsage.put("icon", ""); // Fallback if icon isn't found
-                Log.e("MainActivity", "App not found: " + usageStats.getPackageName(), e);
+                Log.e("DEBUG_USAGE_STATS", "App Not Found: " + packageName);
             }
-            appUsage.put("totalTimeInForeground", usageStats.getTotalTimeInForeground());
-            eventList.add(appUsage);
         }
-        return eventList;
+
+        // Sort apps by usage time (highest first)
+        finalUsageList.sort((a, b) -> Long.compare((long) b.get("totalTimeInForeground"), (long) a.get("totalTimeInForeground")));
+
+        return finalUsageList.size() > 5 ? finalUsageList.subList(0, 5) : finalUsageList;
     }
 
-    // Convert Drawable to Bitmap
+
+
     private Bitmap drawableToBitmap(Drawable drawable) {
+        if (drawable == null) {
+            return Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888); // Return a tiny blank bitmap
+        }
         if (drawable instanceof BitmapDrawable) {
             return ((BitmapDrawable) drawable).getBitmap();
         }
@@ -103,12 +155,11 @@ public class MainActivity extends FlutterActivity {
         return bitmap;
     }
 
-    // Convert Bitmap to Base64
     private String bitmapToBase64(Bitmap bitmap) {
-        if (bitmap == null) return ""; // Prevent NullPointerException
+        if (bitmap == null) return "";
         ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
         bitmap.compress(Bitmap.CompressFormat.PNG, 100, byteArrayOutputStream);
         byte[] byteArray = byteArrayOutputStream.toByteArray();
-        return Base64.encodeToString(byteArray, Base64.NO_WRAP); // FIXED: Use NO_WRAP to prevent errors
+        return Base64.encodeToString(byteArray, Base64.NO_WRAP);
     }
 }
