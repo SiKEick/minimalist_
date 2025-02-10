@@ -46,14 +46,14 @@ class _FocusModeHomePageState extends State<FocusModeHomePage> {
     return SafeArea(
       child: Scaffold(
         backgroundColor: Colors.black,
-        resizeToAvoidBottomInset: true,
-        // Keeps the screen responsive when keyboard appears
+        resizeToAvoidBottomInset:
+            true, // Keeps the screen responsive when keyboard appears
         body: SafeArea(
           child: LayoutBuilder(
             builder: (context, constraints) {
               return SingleChildScrollView(
-                physics: AlwaysScrollableScrollPhysics(),
-                // Prevents unwanted overflow
+                physics:
+                    AlwaysScrollableScrollPhysics(), // Prevents unwanted overflow
                 child: ConstrainedBox(
                   constraints: BoxConstraints(
                     minHeight:
@@ -122,10 +122,10 @@ class _FocusModeHomePageState extends State<FocusModeHomePage> {
                                       _infoColumn('PICKUPS', '20'),
                                     ],
                                   ),
-                                  SizedBox(
-                                    height: 10,
+                                  SizedBox(height: 10),
+                                  Expanded(
+                                    child: Top5App(),
                                   ),
-                                  Top5App()
                                 ],
                               ),
                             ),
@@ -152,7 +152,7 @@ class _FocusModeHomePageState extends State<FocusModeHomePage> {
                                         'FOCUS MODE',
                                         style: TextStyle(
                                           color: Colors.white,
-                                          fontSize: 23,
+                                          fontSize: 26,
                                         ),
                                       ),
                                       Text(
@@ -189,7 +189,7 @@ class _FocusModeHomePageState extends State<FocusModeHomePage> {
     );
   }
 
-// Helper function to create information columns
+  // Helper function to create information columns
   Widget _infoColumn(String title, String value, {Color color = Colors.white}) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.center,

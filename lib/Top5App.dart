@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 class Top5App extends StatefulWidget {
   const Top5App({super.key});
@@ -8,40 +9,104 @@ class Top5App extends StatefulWidget {
 }
 
 class _Top5AppState extends State<Top5App> {
+  static const platform = MethodChannel('com.example.app/usage');
   List<Map<String, dynamic>> topApps = [];
+  bool isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _getUsageStats();
+  }
+
+  Future<void> _getUsageStats() async {
+    try {
+      final List<dynamic> usageStats =
+          await platform.invokeMethod('getUsageStats');
+      final List<Map<String, dynamic>> top5Apps = usageStats.take(5).map((app) {
+        return {
+          "appName": app["appName"] ?? 'Unknown App',
+          "totalTimeInForeground": app["totalTimeInForeground"] ?? 0,
+        };
+      }).toList();
+      setState(() {
+        topApps = top5Apps;
+        isLoading = false;
+      });
+    } on PlatformException catch (e) {
+      print("Failed to get usage stats: '${e.message}'.");
+    }
+  }
+
+  String formatTime(int totalTimeInForeground) {
+    int hours = totalTimeInForeground ~/ 3600000;
+    int minutes = (totalTimeInForeground % 3600000) ~/ 60000;
+    return '${hours}hr ${minutes}min';
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      color: Colors.grey[900],
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Most Used Apps Today',
-              style: TextStyle(color: Colors.white, fontSize: 24),
-            ),
-            SizedBox(height: 16),
-            topApps.isEmpty
-                ? Center(child: CircularProgressIndicator())
-                : Column(
-                    children: topApps
-                        .map((app) => ListTile(
-                              leading: Icon(Icons.android, color: Colors.white),
-                              title: Text(app["packageName"],
-                                  style: TextStyle(color: Colors.white)),
-                              subtitle: Text(
-                                  "Time used: ${(app["screenTime"] ~/ 60000)} min",
-                                  style: TextStyle(color: Colors.grey)),
-                            ))
-                        .toList(),
-                  ),
-          ],
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Most Used Apps Today',
+          style: TextStyle(color: Colors.white, fontSize: 20),
         ),
-      ),
+        isLoading
+            ? Center(child: CircularProgressIndicator())
+            : Expanded(
+                child: Column(
+                  children: topApps
+                      .map((app) => Expanded(
+                            child: Container(
+                              child: Row(
+                                children: [
+                                  // Icon column
+                                  Padding(
+                                    padding: const EdgeInsets.only(right: 10.0),
+                                    child: Icon(
+                                      Icons.android,
+                                      color: Colors.white,
+                                      size: 26,
+                                    ),
+                                  ),
+                                  // App name column
+                                  Expanded(
+                                    flex: 3,
+                                    child: Padding(
+                                      padding:
+                                          const EdgeInsets.fromLTRB(4, 0, 0, 0),
+                                      child: Text(
+                                        app["appName"],
+                                        style: TextStyle(
+                                            color: Colors.white, fontSize: 22),
+                                        overflow: TextOverflow.ellipsis,
+                                        maxLines: 2,
+                                      ),
+                                    ),
+                                  ),
+                                  // Screen time column
+                                  Expanded(
+                                    flex: 2,
+                                    child: Align(
+                                      alignment: Alignment.centerRight,
+                                      child: Text(
+                                        formatTime(
+                                            app["totalTimeInForeground"]),
+                                        style: TextStyle(
+                                            color: Colors.grey, fontSize: 20),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ))
+                      .toList(),
+                ),
+              ),
+      ],
     );
   }
 }
