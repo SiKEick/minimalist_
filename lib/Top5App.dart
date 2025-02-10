@@ -1,3 +1,5 @@
+import 'dart:convert';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -23,25 +25,46 @@ class _Top5AppState extends State<Top5App> {
     try {
       final List<dynamic> usageStats =
           await platform.invokeMethod('getUsageStats');
-      final List<Map<String, dynamic>> top5Apps = usageStats.take(5).map((app) {
-        return {
-          "appName": app["appName"] ?? 'Unknown App',
-          "totalTimeInForeground": app["totalTimeInForeground"] ?? 0,
-        };
-      }).toList();
+
       setState(() {
-        topApps = top5Apps;
+        topApps = usageStats.take(5).map((app) {
+          return {
+            "appName": app["appName"] ?? 'Unknown App',
+            "totalTimeInForeground": app["totalTimeInForeground"] ?? 0,
+            "icon": app["icon"] ?? "",
+          };
+        }).toList();
         isLoading = false;
       });
+
+      // Debugging print
+      for (var app in topApps) {
+        print(
+            "App: ${app['appName']}, Icon: ${app['icon'].isEmpty ? 'No Icon' : 'Has Icon'}");
+      }
     } on PlatformException catch (e) {
-      print("Failed to get usage stats: '${e.message}'.");
+      print("Failed to get usage stats: '${e.message}'");
     }
   }
 
   String formatTime(int totalTimeInForeground) {
     int hours = totalTimeInForeground ~/ 3600000;
     int minutes = (totalTimeInForeground % 3600000) ~/ 60000;
-    return '${hours}hr ${minutes}min';
+    return '${hours} hr ${minutes} min';
+  }
+
+  Widget getAppIcon(String? base64Icon, {double size = 40}) {
+    if (base64Icon == null || base64Icon.isEmpty) {
+      return Icon(Icons.android,
+          color: Colors.white, size: size); // Default icon
+    }
+    try {
+      Uint8List bytes = base64Decode(base64Icon);
+      return Image.memory(bytes, width: size, height: size, fit: BoxFit.cover);
+    } catch (e) {
+      print("Error decoding icon: $e");
+      return Icon(Icons.android, color: Colors.white, size: size);
+    }
   }
 
   @override
@@ -51,7 +74,7 @@ class _Top5AppState extends State<Top5App> {
       children: [
         Text(
           'Activity Details',
-          style: TextStyle(color: Colors.white, fontSize: 24),
+          style: TextStyle(color: Colors.white, fontSize: 22),
         ),
         isLoading
             ? Center(child: CircularProgressIndicator())
@@ -65,18 +88,14 @@ class _Top5AppState extends State<Top5App> {
                                   // Icon column
                                   Padding(
                                     padding: const EdgeInsets.only(right: 10.0),
-                                    child: Icon(
-                                      Icons.android,
-                                      color: Colors.white,
-                                      size: 26,
-                                    ),
+                                    child: getAppIcon(app["icon"], size: 35),
                                   ),
                                   // App name column
                                   Expanded(
                                     flex: 3,
                                     child: Padding(
                                       padding:
-                                          const EdgeInsets.fromLTRB(4, 0, 0, 0),
+                                          const EdgeInsets.fromLTRB(6, 0, 0, 0),
                                       child: Text(
                                         app["appName"],
                                         style: TextStyle(
