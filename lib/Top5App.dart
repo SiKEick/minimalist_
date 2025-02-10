@@ -50,8 +50,8 @@ class _Top5AppState extends State<Top5App> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Most Used Apps Today',
-          style: TextStyle(color: Colors.white, fontSize: 20),
+          'Activity Details',
+          style: TextStyle(color: Colors.white, fontSize: 24),
         ),
         isLoading
             ? Center(child: CircularProgressIndicator())

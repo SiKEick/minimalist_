@@ -81,7 +81,7 @@ class _FocusModeHomePageState extends State<FocusModeHomePage> {
                                     fontSize: 35,
                                   ),
                                 ),
-                                SizedBox(height: 8),
+                                SizedBox(height: 4),
                                 Text(
                                   '9.3',
                                   style: TextStyle(
@@ -101,6 +101,24 @@ class _FocusModeHomePageState extends State<FocusModeHomePage> {
                           ),
                         ),
                         // Screen Time & Graph Section
+                        Card(
+                          color: Colors.grey[900],
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          child: Padding(
+                            padding: const EdgeInsets.all(16),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                _infoColumn('SCREEN TIME', '53m 22s'),
+                                _infoColumn('LAST HOUR', '-3.8%',
+                                    color: Colors.green),
+                                _infoColumn('PICKUPS', '20'),
+                              ],
+                            ),
+                          ),
+                        ),
                         Expanded(
                           flex: 4, // Adjusts dynamically
                           child: Card(
@@ -109,26 +127,8 @@ class _FocusModeHomePageState extends State<FocusModeHomePage> {
                               borderRadius: BorderRadius.circular(16),
                             ),
                             child: Padding(
-                              padding: const EdgeInsets.all(16),
-                              child: Column(
-                                children: [
-                                  Row(
-                                    mainAxisAlignment:
-                                        MainAxisAlignment.spaceBetween,
-                                    children: [
-                                      _infoColumn('SCREEN TIME', '53m 22s'),
-                                      _infoColumn('LAST HOUR', '-3.8%',
-                                          color: Colors.green),
-                                      _infoColumn('PICKUPS', '20'),
-                                    ],
-                                  ),
-                                  SizedBox(height: 10),
-                                  Expanded(
-                                    child: Top5App(),
-                                  ),
-                                ],
-                              ),
-                            ),
+                                padding: const EdgeInsets.all(16),
+                                child: Top5App()),
                           ),
                         ),
                         // Start Focus Mode Section
@@ -152,7 +152,7 @@ class _FocusModeHomePageState extends State<FocusModeHomePage> {
                                         'FOCUS MODE',
                                         style: TextStyle(
                                           color: Colors.white,
-                                          fontSize: 26,
+                                          fontSize: 24,
                                         ),
                                       ),
                                       Text(
@@ -166,7 +166,7 @@ class _FocusModeHomePageState extends State<FocusModeHomePage> {
                                   ),
                                 ),
                                 IconButton(
-                                  padding: EdgeInsets.fromLTRB(0, 0, 16, 18),
+                                  padding: EdgeInsets.fromLTRB(0, 0, 16, 0),
                                   onPressed: () => ShowModeSelection(context),
                                   icon: Icon(Icons.play_circle_fill),
                                   color: Colors.white,
