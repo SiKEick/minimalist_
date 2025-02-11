@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:minimalist_text2/screens/Activity_screen.dart';
 
 class Top5App extends StatefulWidget {
   const Top5App({super.key});
@@ -72,9 +73,28 @@ class _Top5AppState extends State<Top5App> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          'Activity Details',
-          style: TextStyle(color: Colors.white, fontSize: 22),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              'Activity Details',
+              style: TextStyle(color: Colors.white, fontSize: 22),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                      builder: (context) =>
+                          ActivityScreen()), // Navigate to new screen
+                );
+              },
+              child: Text(
+                'See All',
+                style: TextStyle(color: Colors.blue, fontSize: 16),
+              ),
+            ),
+          ],
         ),
         isLoading
             ? Center(child: CircularProgressIndicator())
@@ -99,7 +119,7 @@ class _Top5AppState extends State<Top5App> {
                                       child: Text(
                                         app["appName"],
                                         style: TextStyle(
-                                            color: Colors.white, fontSize: 22),
+                                            color: Colors.white, fontSize: 20),
                                         overflow: TextOverflow.ellipsis,
                                         maxLines: 2,
                                       ),
@@ -114,7 +134,7 @@ class _Top5AppState extends State<Top5App> {
                                         formatTime(
                                             app["totalTimeInForeground"]),
                                         style: TextStyle(
-                                            color: Colors.grey, fontSize: 20),
+                                            color: Colors.grey, fontSize: 18),
                                       ),
                                     ),
                                   ),

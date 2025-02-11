@@ -120,10 +120,10 @@ public class MainActivity extends FlutterActivity {
         UsageStatsManager usageStatsManager = (UsageStatsManager) getSystemService(Context.USAGE_STATS_SERVICE);
         PackageManager packageManager = getPackageManager();
         long endTime = System.currentTimeMillis();
-        long startTime = getStartOfDay(); // Midnight today
+        long startTime = getStartOfDay(); // Midnight timestamp
 
         UsageEvents usageEvents = usageStatsManager.queryEvents(startTime, endTime);
-        Map<String, Long> usageTimeMap = new HashMap<>();
+        Map<String, Long> appUsageMap = new HashMap<>();
         Map<String, Long> appStartTimes = new HashMap<>();
 
         UsageEvents.Event event = new UsageEvents.Event();
@@ -135,49 +135,41 @@ public class MainActivity extends FlutterActivity {
             if (event.getEventType() == UsageEvents.Event.MOVE_TO_FOREGROUND) {
                 appStartTimes.put(packageName, event.getTimeStamp());
             } else if (event.getEventType() == UsageEvents.Event.MOVE_TO_BACKGROUND && appStartTimes.containsKey(packageName)) {
-                long duration = event.getTimeStamp() - appStartTimes.get(packageName);
-                usageTimeMap.put(packageName, usageTimeMap.getOrDefault(packageName, 0L) + duration);
-                appStartTimes.remove(packageName);
+                long startTimeForApp = appStartTimes.get(packageName);
+                long usageDuration = event.getTimeStamp() - startTimeForApp;
+
+                if (usageDuration > 0) {
+                    appUsageMap.put(packageName, appUsageMap.getOrDefault(packageName, 0L) + usageDuration);
+                }
+
+                appStartTimes.remove(packageName); // Remove after calculating
             }
         }
 
         List<Map<String, Object>> finalUsageList = new ArrayList<>();
-
-        for (Map.Entry<String, Long> entry : usageTimeMap.entrySet()) {
-            String packageName = entry.getKey();
-            long totalTime = entry.getValue();
-
+        for (Map.Entry<String, Long> entry : appUsageMap.entrySet()) {
             try {
-                ApplicationInfo appInfo = packageManager.getApplicationInfo(packageName, 0);
-
-                // **Skip system apps but allow Google apps**
-                if ((appInfo.flags & ApplicationInfo.FLAG_SYSTEM) != 0
-                        && !packageName.startsWith("com.google.")
-                        && !packageName.equals("com.android.chrome")
-                        && !packageName.equals("com.android.youtube")) {
-                    continue;
-                }
-
+                ApplicationInfo appInfo = packageManager.getApplicationInfo(entry.getKey(), 0);
                 String appName = packageManager.getApplicationLabel(appInfo).toString();
                 Drawable icon = packageManager.getApplicationIcon(appInfo);
                 String iconBase64 = bitmapToBase64(drawableToBitmap(icon));
 
                 Map<String, Object> appUsage = new HashMap<>();
                 appUsage.put("appName", appName);
-                appUsage.put("packageName", packageName);
+                appUsage.put("packageName", entry.getKey());
                 appUsage.put("icon", iconBase64);
-                appUsage.put("totalTimeInForeground", totalTime);
+                appUsage.put("totalTimeInForeground", entry.getValue());
 
                 finalUsageList.add(appUsage);
             } catch (PackageManager.NameNotFoundException e) {
-                Log.e("DEBUG_USAGE_STATS", "App Not Found: " + packageName);
+                Log.e("DEBUG_USAGE_STATS", "App Not Found: " + entry.getKey());
             }
         }
 
-        // **Sort by most used apps**
+        // Sort by usage time (highest first)
         finalUsageList.sort((a, b) -> Long.compare((long) b.get("totalTimeInForeground"), (long) a.get("totalTimeInForeground")));
 
-        return finalUsageList.size() > 5 ? finalUsageList.subList(0, 5) : finalUsageList;
+        return finalUsageList;
     }
 
 
