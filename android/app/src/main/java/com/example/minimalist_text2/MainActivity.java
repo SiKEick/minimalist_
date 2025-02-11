@@ -1,5 +1,5 @@
 package com.example.minimalist_text2;
-
+import android.app.usage.UsageEvents;
 import android.app.AppOpsManager;
 import android.app.usage.UsageStats;
 import android.app.usage.UsageStatsManager;
@@ -48,6 +48,13 @@ public class MainActivity extends FlutterActivity {
                             }
                             List<Map<String, Object>> usageStats = getUsageStats();
                             result.success(usageStats);
+                        } else if (call.method.equals("getTotalScreenTime")) { // New method
+                            if (!isUsageAccessGranted()) {
+                                result.error("PERMISSION_DENIED", "Usage Access permission is not granted", null);
+                                return;
+                            }
+                            long totalScreenTime = getTotalScreenTime();
+                            result.success(totalScreenTime);
                         } else {
                             result.notImplemented();
                         }
@@ -63,58 +70,92 @@ public class MainActivity extends FlutterActivity {
         return mode == AppOpsManager.MODE_ALLOWED;
     }
 
-    @RequiresApi(api = Build.VERSION_CODES.LOLLIPOP)
-    private List<Map<String, Object>> getUsageStats() {
+    private long getTotalScreenTime() {
+        long totalScreenTime = 0;
         UsageStatsManager usageStatsManager = (UsageStatsManager) getSystemService(Context.USAGE_STATS_SERVICE);
-        PackageManager packageManager = getPackageManager();
-        Calendar calendar = Calendar.getInstance();
 
-        long endTime = calendar.getTimeInMillis(); // Current time
+        long endTime = System.currentTimeMillis();
+        long startTime = getStartOfDay(); // Midnight today
+
+        UsageEvents usageEvents = usageStatsManager.queryEvents(startTime, endTime);
+        Map<String, Long> appUsageMap = new HashMap<>();
+
+        UsageEvents.Event event = new UsageEvents.Event();
+        Map<String, Long> appStartTimes = new HashMap<>();
+
+        while (usageEvents.hasNextEvent()) {
+            usageEvents.getNextEvent(event);
+            String packageName = event.getPackageName();
+
+            if (event.getEventType() == UsageEvents.Event.MOVE_TO_FOREGROUND) {
+                appStartTimes.put(packageName, event.getTimeStamp());
+            } else if (event.getEventType() == UsageEvents.Event.MOVE_TO_BACKGROUND && appStartTimes.containsKey(packageName)) {
+                long duration = event.getTimeStamp() - appStartTimes.get(packageName);
+                appUsageMap.put(packageName, appUsageMap.getOrDefault(packageName, 0L) + duration);
+                appStartTimes.remove(packageName);
+            }
+        }
+
+        for (long usageTime : appUsageMap.values()) {
+            totalScreenTime += usageTime;
+        }
+
+        Log.d("DEBUG_FINAL_SCREEN_TIME", "Total Screen Time Today: " + totalScreenTime);
+        return totalScreenTime;
+    }
+
+
+    private long getStartOfDay() {
+        Calendar calendar = Calendar.getInstance();
         calendar.set(Calendar.HOUR_OF_DAY, 0);
         calendar.set(Calendar.MINUTE, 0);
         calendar.set(Calendar.SECOND, 0);
         calendar.set(Calendar.MILLISECOND, 0);
-        long startTime = calendar.getTimeInMillis();
+        return calendar.getTimeInMillis();
+    }
 
-        List<UsageStats> usageStatsList = usageStatsManager.queryUsageStats(
-                UsageStatsManager.INTERVAL_DAILY, startTime, endTime);
 
-        Log.d("DEBUG_RAW_USAGE_STATS", "------ Raw Usage Data ------");
+    @RequiresApi(api = Build.VERSION_CODES.LOLLIPOP)
+    private List<Map<String, Object>> getUsageStats() {
+        UsageStatsManager usageStatsManager = (UsageStatsManager) getSystemService(Context.USAGE_STATS_SERVICE);
+        PackageManager packageManager = getPackageManager();
+        long endTime = System.currentTimeMillis();
+        long startTime = getStartOfDay(); // Midnight today
 
-        // Store all occurrences of each app
-        Map<String, List<Long>> usageTimeMap = new HashMap<>();
+        UsageEvents usageEvents = usageStatsManager.queryEvents(startTime, endTime);
+        Map<String, Long> usageTimeMap = new HashMap<>();
+        Map<String, Long> appStartTimes = new HashMap<>();
 
-        for (UsageStats stats : usageStatsList) {
-            long foregroundTime = stats.getTotalTimeInForeground();
-            String packageName = stats.getPackageName();
+        UsageEvents.Event event = new UsageEvents.Event();
 
-            if (foregroundTime > 0) {
-                Log.d("DEBUG_RAW_USAGE_STATS", "App: " + packageName + " - Foreground Time: " + foregroundTime);
+        while (usageEvents.hasNextEvent()) {
+            usageEvents.getNextEvent(event);
+            String packageName = event.getPackageName();
 
-                // Add usage time to the list for that package
-                usageTimeMap.putIfAbsent(packageName, new ArrayList<>());
-                usageTimeMap.get(packageName).add(foregroundTime);
+            if (event.getEventType() == UsageEvents.Event.MOVE_TO_FOREGROUND) {
+                appStartTimes.put(packageName, event.getTimeStamp());
+            } else if (event.getEventType() == UsageEvents.Event.MOVE_TO_BACKGROUND && appStartTimes.containsKey(packageName)) {
+                long duration = event.getTimeStamp() - appStartTimes.get(packageName);
+                usageTimeMap.put(packageName, usageTimeMap.getOrDefault(packageName, 0L) + duration);
+                appStartTimes.remove(packageName);
             }
         }
 
-        // Prepare the final result
         List<Map<String, Object>> finalUsageList = new ArrayList<>();
 
-        for (Map.Entry<String, List<Long>> entry : usageTimeMap.entrySet()) {
+        for (Map.Entry<String, Long> entry : usageTimeMap.entrySet()) {
             String packageName = entry.getKey();
-            List<Long> timeList = entry.getValue();
-
-            // Calculate the average time for this app
-            long total = 0;
-            for (long time : timeList) {
-                total += time;
-            }
-            long averageTime = total / timeList.size(); // Taking the average
+            long totalTime = entry.getValue();
 
             try {
                 ApplicationInfo appInfo = packageManager.getApplicationInfo(packageName, 0);
-                if ((appInfo.flags & ApplicationInfo.FLAG_SYSTEM) != 0) {
-                    continue; // Skip system apps
+
+                // **Skip system apps but allow Google apps**
+                if ((appInfo.flags & ApplicationInfo.FLAG_SYSTEM) != 0
+                        && !packageName.startsWith("com.google.")
+                        && !packageName.equals("com.android.chrome")
+                        && !packageName.equals("com.android.youtube")) {
+                    continue;
                 }
 
                 String appName = packageManager.getApplicationLabel(appInfo).toString();
@@ -123,22 +164,21 @@ public class MainActivity extends FlutterActivity {
 
                 Map<String, Object> appUsage = new HashMap<>();
                 appUsage.put("appName", appName);
+                appUsage.put("packageName", packageName);
                 appUsage.put("icon", iconBase64);
-                appUsage.put("totalTimeInForeground", averageTime);
+                appUsage.put("totalTimeInForeground", totalTime);
 
                 finalUsageList.add(appUsage);
-
             } catch (PackageManager.NameNotFoundException e) {
                 Log.e("DEBUG_USAGE_STATS", "App Not Found: " + packageName);
             }
         }
 
-        // Sort apps by usage time (highest first)
+        // **Sort by most used apps**
         finalUsageList.sort((a, b) -> Long.compare((long) b.get("totalTimeInForeground"), (long) a.get("totalTimeInForeground")));
 
         return finalUsageList.size() > 5 ? finalUsageList.subList(0, 5) : finalUsageList;
     }
-
 
 
     private Bitmap drawableToBitmap(Drawable drawable) {

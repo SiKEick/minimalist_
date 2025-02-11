@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:minimalist_text2/screens/mode_selection.dart';
 import 'package:minimalist_text2/Top5App.dart';
+import 'package:flutter/services.dart';
 
 class FocusModeHomePage extends StatefulWidget {
   const FocusModeHomePage({super.key});
@@ -17,6 +18,30 @@ class _FocusModeHomePageState extends State<FocusModeHomePage> {
     {'title': 'WORK MODE', 'subtitle': 'Boost your productivity.'},
     {'title': 'EXERCISE MODE', 'subtitle': 'Track your workout.'},
   ];
+  static const platform = MethodChannel('com.example.app/usage');
+  String screenTime = "Loading...";
+
+  @override
+  void initState() {
+    super.initState();
+    _getTotalScreenTime();
+  }
+
+  Future<void> _getTotalScreenTime() async {
+    try {
+      final int result = await platform.invokeMethod('getTotalScreenTime');
+      Duration duration = Duration(milliseconds: result);
+      String formattedTime =
+          "${duration.inHours}h ${duration.inMinutes.remainder(60)}m";
+      setState(() {
+        screenTime = formattedTime;
+      });
+    } on PlatformException catch (e) {
+      setState(() {
+        screenTime = "Failed to get screen time: ${e.message}";
+      });
+    }
+  }
 
   // Method to update the modes list
   void _updateModes(List<Map<String, String>> newModes) {
@@ -111,7 +136,7 @@ class _FocusModeHomePageState extends State<FocusModeHomePage> {
                             child: Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                _infoColumn('SCREEN TIME', '53m 22s'),
+                                _infoColumn('SCREEN TIME', screenTime),
                                 _infoColumn('LAST HOUR', '-3.8%',
                                     color: Colors.green),
                                 _infoColumn('PICKUPS', '20'),
