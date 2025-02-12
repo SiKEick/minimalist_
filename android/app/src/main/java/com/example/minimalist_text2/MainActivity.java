@@ -41,14 +41,21 @@ public class MainActivity extends FlutterActivity {
                     @RequiresApi(api = Build.VERSION_CODES.LOLLIPOP)
                     @Override
                     public void onMethodCall(MethodCall call, MethodChannel.Result result) {
-                        if (call.method.equals("getUsageStats")) {
+                        if (call.method.equals("getUsageStats")) { // For Main Screen (Top 5)
                             if (!isUsageAccessGranted()) {
                                 result.error("PERMISSION_DENIED", "Usage Access permission is not granted", null);
                                 return;
                             }
                             List<Map<String, Object>> usageStats = getUsageStats();
                             result.success(usageStats);
-                        } else if (call.method.equals("getTotalScreenTime")) { // New method
+                        } else if (call.method.equals("getAllUsageStats")) { // For Activity Screen (All apps >1 min)
+                            if (!isUsageAccessGranted()) {
+                                result.error("PERMISSION_DENIED", "Usage Access permission is not granted", null);
+                                return;
+                            }
+                            List<Map<String, Object>> allUsageStats = getAllUsageStats();
+                            result.success(allUsageStats);
+                        } else if (call.method.equals("getTotalScreenTime")) { // Common total screen time
                             if (!isUsageAccessGranted()) {
                                 result.error("PERMISSION_DENIED", "Usage Access permission is not granted", null);
                                 return;
@@ -59,6 +66,7 @@ public class MainActivity extends FlutterActivity {
                             result.notImplemented();
                         }
                     }
+
                 }
         );
     }
@@ -73,15 +81,16 @@ public class MainActivity extends FlutterActivity {
     private long getTotalScreenTime() {
         long totalScreenTime = 0;
         UsageStatsManager usageStatsManager = (UsageStatsManager) getSystemService(Context.USAGE_STATS_SERVICE);
+        PackageManager packageManager = getPackageManager();
 
         long endTime = System.currentTimeMillis();
         long startTime = getStartOfDay(); // Midnight today
 
         UsageEvents usageEvents = usageStatsManager.queryEvents(startTime, endTime);
         Map<String, Long> appUsageMap = new HashMap<>();
+        Map<String, Long> appStartTimes = new HashMap<>();
 
         UsageEvents.Event event = new UsageEvents.Event();
-        Map<String, Long> appStartTimes = new HashMap<>();
 
         while (usageEvents.hasNextEvent()) {
             usageEvents.getNextEvent(event);
@@ -91,18 +100,31 @@ public class MainActivity extends FlutterActivity {
                 appStartTimes.put(packageName, event.getTimeStamp());
             } else if (event.getEventType() == UsageEvents.Event.MOVE_TO_BACKGROUND && appStartTimes.containsKey(packageName)) {
                 long duration = event.getTimeStamp() - appStartTimes.get(packageName);
-                appUsageMap.put(packageName, appUsageMap.getOrDefault(packageName, 0L) + duration);
+
+                if (duration > 0) {
+                    appUsageMap.put(packageName, appUsageMap.getOrDefault(packageName, 0L) + duration);
+                }
                 appStartTimes.remove(packageName);
             }
         }
 
-        for (long usageTime : appUsageMap.values()) {
-            totalScreenTime += usageTime;
+        for (Map.Entry<String, Long> entry : appUsageMap.entrySet()) {
+            try {
+                ApplicationInfo appInfo = packageManager.getApplicationInfo(entry.getKey(), 0);
+
+                // **Filter: Only count installed (non-system) apps**
+                if ((appInfo.flags & ApplicationInfo.FLAG_SYSTEM) == 0) {
+                    totalScreenTime += entry.getValue();
+                }
+            } catch (PackageManager.NameNotFoundException e) {
+                Log.e("DEBUG_TOTAL_SCREEN_TIME", "App Not Found: " + entry.getKey());
+            }
         }
 
-        Log.d("DEBUG_FINAL_SCREEN_TIME", "Total Screen Time Today: " + totalScreenTime);
+        Log.d("DEBUG_FINAL_SCREEN_TIME", "Total Installed Apps Screen Time Today: " + totalScreenTime);
         return totalScreenTime;
     }
+
 
 
     private long getStartOfDay() {
@@ -113,6 +135,67 @@ public class MainActivity extends FlutterActivity {
         calendar.set(Calendar.MILLISECOND, 0);
         return calendar.getTimeInMillis();
     }
+    // activity screen
+    @RequiresApi(api = Build.VERSION_CODES.LOLLIPOP)
+    private List<Map<String, Object>> getAllUsageStats() {
+        UsageStatsManager usageStatsManager = (UsageStatsManager) getSystemService(Context.USAGE_STATS_SERVICE);
+        PackageManager packageManager = getPackageManager();
+        long endTime = System.currentTimeMillis();
+        long startTime = getStartOfDay();
+
+        UsageEvents usageEvents = usageStatsManager.queryEvents(startTime, endTime);
+        Map<String, Long> appUsageMap = new HashMap<>();
+        Map<String, Long> appStartTimes = new HashMap<>();
+
+        UsageEvents.Event event = new UsageEvents.Event();
+
+        while (usageEvents.hasNextEvent()) {
+            usageEvents.getNextEvent(event);
+            String packageName = event.getPackageName();
+
+            if (event.getEventType() == UsageEvents.Event.MOVE_TO_FOREGROUND) {
+                appStartTimes.put(packageName, event.getTimeStamp());
+            } else if (event.getEventType() == UsageEvents.Event.MOVE_TO_BACKGROUND && appStartTimes.containsKey(packageName)) {
+                long startTimeForApp = appStartTimes.get(packageName);
+                long usageDuration = event.getTimeStamp() - startTimeForApp;
+
+                if (usageDuration > 0) {
+                    appUsageMap.put(packageName, appUsageMap.getOrDefault(packageName, 0L) + usageDuration);
+                }
+
+                appStartTimes.remove(packageName);
+            }
+        }
+
+        List<Map<String, Object>> finalUsageList = new ArrayList<>();
+        List<ApplicationInfo> installedApps = packageManager.getInstalledApplications(0);
+
+        for (ApplicationInfo appInfo : installedApps) {
+            if ((appInfo.flags & ApplicationInfo.FLAG_SYSTEM) != 0) {
+                continue; // Skip system apps, only show installed apps
+            }
+
+            String packageName = appInfo.packageName;
+            String appName = packageManager.getApplicationLabel(appInfo).toString();
+            Drawable icon = packageManager.getApplicationIcon(appInfo);
+            String iconBase64 = bitmapToBase64(drawableToBitmap(icon));
+            long usageTime = appUsageMap.getOrDefault(packageName, 0L); // Get usage time, default to 0 if not found
+
+            Map<String, Object> appUsage = new HashMap<>();
+            appUsage.put("appName", appName);
+            appUsage.put("packageName", packageName);
+            appUsage.put("icon", iconBase64);
+            appUsage.put("totalTimeInForeground", usageTime);
+
+            finalUsageList.add(appUsage);
+        }
+
+        // Sort by usage time (highest first)
+        finalUsageList.sort((a, b) -> Long.compare((long) b.get("totalTimeInForeground"), (long) a.get("totalTimeInForeground")));
+
+        return finalUsageList;
+    }
+
 
 
     @RequiresApi(api = Build.VERSION_CODES.LOLLIPOP)
@@ -150,6 +233,9 @@ public class MainActivity extends FlutterActivity {
         for (Map.Entry<String, Long> entry : appUsageMap.entrySet()) {
             try {
                 ApplicationInfo appInfo = packageManager.getApplicationInfo(entry.getKey(), 0);
+                if ((appInfo.flags & ApplicationInfo.FLAG_SYSTEM) != 0) {
+                    continue;
+                }
                 String appName = packageManager.getApplicationLabel(appInfo).toString();
                 Drawable icon = packageManager.getApplicationIcon(appInfo);
                 String iconBase64 = bitmapToBase64(drawableToBitmap(icon));

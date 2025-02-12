@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:intl/intl.dart'; // For date formatting
 
 class ActivityScreen extends StatefulWidget {
   const ActivityScreen({super.key});
@@ -13,18 +14,25 @@ class ActivityScreen extends StatefulWidget {
 class _ActivityScreenState extends State<ActivityScreen> {
   static const platform = MethodChannel('com.example.app/usage');
   List<Map<String, dynamic>> allApps = [];
+  Map<String, int> dailyScreenTime = {};
   bool isLoading = true;
+  DateTime selectedDate = DateTime.now(); // Default to today
 
   @override
   void initState() {
     super.initState();
-    _getAllUsageStats();
+    _getAllUsageStats(selectedDate);
   }
 
-  Future<void> _getAllUsageStats() async {
+  Future<void> _getAllUsageStats(DateTime date) async {
     try {
+      // Get total screen time
+      final int totalScreenTime =
+          await platform.invokeMethod('getTotalScreenTime');
+
+      // Get all apps' usage data (apps >1 min)
       final List<dynamic> usageStats =
-          await platform.invokeMethod('getUsageStats');
+          await platform.invokeMethod('getAllUsageStats');
 
       setState(() {
         allApps = usageStats.map((app) {
@@ -34,6 +42,11 @@ class _ActivityScreenState extends State<ActivityScreen> {
             "icon": app["icon"] ?? "",
           };
         }).toList();
+
+        // Store total daily screen time
+        String formattedDate = DateFormat('EEE, MMM d').format(date);
+        dailyScreenTime[formattedDate] = totalScreenTime;
+
         isLoading = false;
       });
     } on PlatformException catch (e) {
@@ -59,33 +72,88 @@ class _ActivityScreenState extends State<ActivityScreen> {
     }
   }
 
+  void _changeDate(int days) {
+    setState(() {
+      selectedDate = selectedDate.add(Duration(days: days));
+      isLoading = true;
+      _getAllUsageStats(selectedDate);
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text("All Apps Usage"),
+        title: Text("Screen Time"),
         backgroundColor: Colors.black,
       ),
       backgroundColor: Colors.black,
-      body: isLoading
-          ? Center(child: CircularProgressIndicator())
-          : ListView.builder(
-              itemCount: allApps.length,
-              itemBuilder: (context, index) {
-                final app = allApps[index];
-                return ListTile(
-                  leading: getAppIcon(app["icon"], size: 40),
-                  title: Text(
-                    app["appName"],
-                    style: TextStyle(color: Colors.white),
+      body: Padding(
+        padding: EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Total screen time
+            Center(
+              child: Column(
+                children: [
+                  Text(
+                    "${formatTime(dailyScreenTime[DateFormat('EEE, MMM d').format(selectedDate)] ?? 0)}",
+                    style: TextStyle(color: Colors.white, fontSize: 26),
                   ),
-                  trailing: Text(
-                    formatTime(app["totalTimeInForeground"]),
-                    style: TextStyle(color: Colors.grey),
+                  Text(
+                    "Today",
+                    style: TextStyle(color: Colors.grey, fontSize: 16),
                   ),
-                );
-              },
+                ],
+              ),
             ),
+            SizedBox(height: 20),
+
+            // Date navigation
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                IconButton(
+                  icon: Icon(Icons.arrow_back_ios, color: Colors.white),
+                  onPressed: () => _changeDate(-1),
+                ),
+                Text(
+                  DateFormat('EEE, MMM d').format(selectedDate),
+                  style: TextStyle(color: Colors.white, fontSize: 18),
+                ),
+                IconButton(
+                  icon: Icon(Icons.arrow_forward_ios, color: Colors.white),
+                  onPressed: () => _changeDate(1),
+                ),
+              ],
+            ),
+            SizedBox(height: 10),
+
+            isLoading
+                ? Center(child: CircularProgressIndicator())
+                : Expanded(
+                    child: ListView.builder(
+                      itemCount: allApps.length,
+                      itemBuilder: (context, index) {
+                        final app = allApps[index];
+                        return ListTile(
+                          leading: getAppIcon(app["icon"], size: 40),
+                          title: Text(
+                            app["appName"],
+                            style: TextStyle(color: Colors.white),
+                          ),
+                          trailing: Text(
+                            formatTime(app["totalTimeInForeground"]),
+                            style: TextStyle(color: Colors.grey),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+          ],
+        ),
+      ),
     );
   }
 }
