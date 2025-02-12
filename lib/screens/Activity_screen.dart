@@ -30,7 +30,7 @@ class _ActivityScreenState extends State<ActivityScreen> {
       final int totalScreenTime =
           await platform.invokeMethod('getTotalScreenTime');
 
-      // Get all apps' usage data (apps >1 min)
+      // Get all apps' usage data
       final List<dynamic> usageStats =
           await platform.invokeMethod('getAllUsageStats');
 
@@ -57,7 +57,19 @@ class _ActivityScreenState extends State<ActivityScreen> {
   String formatTime(int totalTimeInForeground) {
     int hours = totalTimeInForeground ~/ 3600000;
     int minutes = (totalTimeInForeground % 3600000) ~/ 60000;
-    return '${hours} hr ${minutes} min';
+    if (hours == 0) {
+      return '${minutes} min';
+    } else {
+      return '${hours} hr ${minutes} min';
+    }
+  }
+
+  bool _canMoveForward() {
+    DateTime today = DateTime.now();
+    DateTime selected =
+        DateTime(selectedDate.year, selectedDate.month, selectedDate.day);
+    DateTime current = DateTime(today.year, today.month, today.day);
+    return selected.isBefore(current); // Ensures you can't move beyond today
   }
 
   Widget getAppIcon(String? base64Icon, {double size = 40}) {
@@ -84,7 +96,10 @@ class _ActivityScreenState extends State<ActivityScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text("Screen Time"),
+        title: Text(
+          "Screen Time",
+          style: TextStyle(fontSize: 27),
+        ),
         backgroundColor: Colors.black,
       ),
       backgroundColor: Colors.black,
@@ -99,16 +114,12 @@ class _ActivityScreenState extends State<ActivityScreen> {
                 children: [
                   Text(
                     "${formatTime(dailyScreenTime[DateFormat('EEE, MMM d').format(selectedDate)] ?? 0)}",
-                    style: TextStyle(color: Colors.white, fontSize: 26),
-                  ),
-                  Text(
-                    "Today",
-                    style: TextStyle(color: Colors.grey, fontSize: 16),
+                    style: TextStyle(color: Colors.white, fontSize: 30),
                   ),
                 ],
               ),
             ),
-            SizedBox(height: 20),
+            SizedBox(height: 10),
 
             // Date navigation
             Row(
@@ -123,8 +134,9 @@ class _ActivityScreenState extends State<ActivityScreen> {
                   style: TextStyle(color: Colors.white, fontSize: 18),
                 ),
                 IconButton(
-                  icon: Icon(Icons.arrow_forward_ios, color: Colors.white),
-                  onPressed: () => _changeDate(1),
+                  icon: Icon(Icons.arrow_forward_ios,
+                      color: _canMoveForward() ? Colors.white : Colors.grey),
+                  onPressed: _canMoveForward() ? () => _changeDate(1) : null,
                 ),
               ],
             ),
@@ -138,14 +150,14 @@ class _ActivityScreenState extends State<ActivityScreen> {
                       itemBuilder: (context, index) {
                         final app = allApps[index];
                         return ListTile(
-                          leading: getAppIcon(app["icon"], size: 40),
+                          leading: getAppIcon(app["icon"], size: 35),
                           title: Text(
                             app["appName"],
-                            style: TextStyle(color: Colors.white),
+                            style: TextStyle(color: Colors.white, fontSize: 20),
                           ),
                           trailing: Text(
                             formatTime(app["totalTimeInForeground"]),
-                            style: TextStyle(color: Colors.grey),
+                            style: TextStyle(color: Colors.white, fontSize: 15),
                           ),
                         );
                       },

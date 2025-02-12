@@ -135,12 +135,23 @@ public class MainActivity extends FlutterActivity {
         calendar.set(Calendar.MILLISECOND, 0);
         return calendar.getTimeInMillis();
     }
-    // activity screen
+
+    private long getEndOfDay(long timestamp) {
+        Calendar calendar = Calendar.getInstance();
+        calendar.setTimeInMillis(timestamp);
+        calendar.set(Calendar.HOUR_OF_DAY, 23);
+        calendar.set(Calendar.MINUTE, 59);
+        calendar.set(Calendar.SECOND, 59);
+        calendar.set(Calendar.MILLISECOND, 999);
+        return calendar.getTimeInMillis();
+    }
+
     @RequiresApi(api = Build.VERSION_CODES.LOLLIPOP)
     private List<Map<String, Object>> getAllUsageStats() {
         UsageStatsManager usageStatsManager = (UsageStatsManager) getSystemService(Context.USAGE_STATS_SERVICE);
         PackageManager packageManager = getPackageManager();
-        long endTime = System.currentTimeMillis();
+        long currentTime = System.currentTimeMillis();
+        long endTime = getEndOfDay(currentTime);
         long startTime = getStartOfDay();
 
         UsageEvents usageEvents = usageStatsManager.queryEvents(startTime, endTime);
@@ -156,43 +167,38 @@ public class MainActivity extends FlutterActivity {
             if (event.getEventType() == UsageEvents.Event.MOVE_TO_FOREGROUND) {
                 appStartTimes.put(packageName, event.getTimeStamp());
             } else if (event.getEventType() == UsageEvents.Event.MOVE_TO_BACKGROUND && appStartTimes.containsKey(packageName)) {
-                long startTimeForApp = appStartTimes.get(packageName);
-                long usageDuration = event.getTimeStamp() - startTimeForApp;
-
+                long usageDuration = event.getTimeStamp() - appStartTimes.get(packageName);
                 if (usageDuration > 0) {
                     appUsageMap.put(packageName, appUsageMap.getOrDefault(packageName, 0L) + usageDuration);
                 }
-
                 appStartTimes.remove(packageName);
             }
         }
 
         List<Map<String, Object>> finalUsageList = new ArrayList<>();
-        List<ApplicationInfo> installedApps = packageManager.getInstalledApplications(0);
 
-        for (ApplicationInfo appInfo : installedApps) {
-            if ((appInfo.flags & ApplicationInfo.FLAG_SYSTEM) != 0) {
-                continue; // Skip system apps, only show installed apps
+        for (Map.Entry<String, Long> entry : appUsageMap.entrySet()) {
+            try {
+                ApplicationInfo appInfo = packageManager.getApplicationInfo(entry.getKey(), 0);
+                if ((appInfo.flags & ApplicationInfo.FLAG_SYSTEM) != 0) continue; // ✅ Skip system apps
+
+                String appName = packageManager.getApplicationLabel(appInfo).toString();
+                Drawable icon = packageManager.getApplicationIcon(appInfo);
+                String iconBase64 = bitmapToBase64(drawableToBitmap(icon));
+
+                Map<String, Object> appUsage = new HashMap<>();
+                appUsage.put("appName", appName);
+                appUsage.put("packageName", entry.getKey());
+                appUsage.put("icon", iconBase64);
+                appUsage.put("totalTimeInForeground", entry.getValue());
+
+                finalUsageList.add(appUsage);
+            } catch (PackageManager.NameNotFoundException e) {
+                Log.e("DEBUG_USAGE_STATS", "App Not Found: " + entry.getKey());
             }
-
-            String packageName = appInfo.packageName;
-            String appName = packageManager.getApplicationLabel(appInfo).toString();
-            Drawable icon = packageManager.getApplicationIcon(appInfo);
-            String iconBase64 = bitmapToBase64(drawableToBitmap(icon));
-            long usageTime = appUsageMap.getOrDefault(packageName, 0L); // Get usage time, default to 0 if not found
-
-            Map<String, Object> appUsage = new HashMap<>();
-            appUsage.put("appName", appName);
-            appUsage.put("packageName", packageName);
-            appUsage.put("icon", iconBase64);
-            appUsage.put("totalTimeInForeground", usageTime);
-
-            finalUsageList.add(appUsage);
         }
 
-        // Sort by usage time (highest first)
         finalUsageList.sort((a, b) -> Long.compare((long) b.get("totalTimeInForeground"), (long) a.get("totalTimeInForeground")));
-
         return finalUsageList;
     }
 

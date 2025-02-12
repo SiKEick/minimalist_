@@ -51,7 +51,11 @@ class _Top5AppState extends State<Top5App> {
   String formatTime(int totalTimeInForeground) {
     int hours = totalTimeInForeground ~/ 3600000;
     int minutes = (totalTimeInForeground % 3600000) ~/ 60000;
-    return '${hours} hr ${minutes} min';
+    if (hours == 0) {
+      return '${minutes} min';
+    } else {
+      return '${hours} hr ${minutes} min';
+    }
   }
 
   Widget getAppIcon(String? base64Icon, {double size = 40}) {
@@ -134,7 +138,7 @@ class _Top5AppState extends State<Top5App> {
                                         formatTime(
                                             app["totalTimeInForeground"]),
                                         style: TextStyle(
-                                            color: Colors.grey, fontSize: 18),
+                                            color: Colors.white, fontSize: 18),
                                       ),
                                     ),
                                   ),
