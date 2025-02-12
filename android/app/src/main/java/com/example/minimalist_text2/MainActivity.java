@@ -48,19 +48,25 @@ public class MainActivity extends FlutterActivity {
                             }
                             List<Map<String, Object>> usageStats = getUsageStats();
                             result.success(usageStats);
-                        } else if (call.method.equals("getAllUsageStats")) { // For Activity Screen (All apps >1 min)
+                        } else if (call.method.equals("getAllUsageStats")) {
                             if (!isUsageAccessGranted()) {
                                 result.error("PERMISSION_DENIED", "Usage Access permission is not granted", null);
                                 return;
                             }
-                            List<Map<String, Object>> allUsageStats = getAllUsageStats();
+
+                            long selectedDate = call.arguments(); // Get timestamp from Flutter
+                            long startTime = getStartOfDay(selectedDate); // Pass timestamp to getStartOfDay()
+
+                            List<Map<String, Object>> allUsageStats = getAllUsageStats(startTime);
                             result.success(allUsageStats);
-                        } else if (call.method.equals("getTotalScreenTime")) { // Common total screen time
+                        }
+                        else if (call.method.equals("getTotalScreenTime")) { // Common total screen time
                             if (!isUsageAccessGranted()) {
                                 result.error("PERMISSION_DENIED", "Usage Access permission is not granted", null);
                                 return;
                             }
-                            long totalScreenTime = getTotalScreenTime();
+                            long selectedDate = call.arguments(); // Get timestamp from Flutter
+                            long totalScreenTime = getTotalScreenTime(selectedDate);
                             result.success(totalScreenTime);
                         } else {
                             result.notImplemented();
@@ -78,13 +84,13 @@ public class MainActivity extends FlutterActivity {
         return mode == AppOpsManager.MODE_ALLOWED;
     }
 
-    private long getTotalScreenTime() {
+    private long getTotalScreenTime(long timestamp) {
         long totalScreenTime = 0;
         UsageStatsManager usageStatsManager = (UsageStatsManager) getSystemService(Context.USAGE_STATS_SERVICE);
         PackageManager packageManager = getPackageManager();
 
-        long endTime = System.currentTimeMillis();
-        long startTime = getStartOfDay(); // Midnight today
+        long startTime = getStartOfDay(timestamp); // Get midnight of selected date
+        long endTime = getEndOfDay(timestamp); // Get 23:59:59 of selected date
 
         UsageEvents usageEvents = usageStatsManager.queryEvents(startTime, endTime);
         Map<String, Long> appUsageMap = new HashMap<>();
@@ -112,7 +118,7 @@ public class MainActivity extends FlutterActivity {
             try {
                 ApplicationInfo appInfo = packageManager.getApplicationInfo(entry.getKey(), 0);
 
-                // **Filter: Only count installed (non-system) apps**
+                // ✅ Only count installed (non-system) apps
                 if ((appInfo.flags & ApplicationInfo.FLAG_SYSTEM) == 0) {
                     totalScreenTime += entry.getValue();
                 }
@@ -121,20 +127,22 @@ public class MainActivity extends FlutterActivity {
             }
         }
 
-        Log.d("DEBUG_FINAL_SCREEN_TIME", "Total Installed Apps Screen Time Today: " + totalScreenTime);
+        Log.d("DEBUG_FINAL_SCREEN_TIME", "Total Screen Time for " + timestamp + ": " + totalScreenTime);
         return totalScreenTime;
     }
 
 
 
-    private long getStartOfDay() {
+    private long getStartOfDay(long timestamp) {
         Calendar calendar = Calendar.getInstance();
+        calendar.setTimeInMillis(timestamp);
         calendar.set(Calendar.HOUR_OF_DAY, 0);
         calendar.set(Calendar.MINUTE, 0);
         calendar.set(Calendar.SECOND, 0);
         calendar.set(Calendar.MILLISECOND, 0);
-        return calendar.getTimeInMillis();
+        return calendar.getTimeInMillis(); // Return midnight of selected date
     }
+
 
     private long getEndOfDay(long timestamp) {
         Calendar calendar = Calendar.getInstance();
@@ -147,12 +155,13 @@ public class MainActivity extends FlutterActivity {
     }
 
     @RequiresApi(api = Build.VERSION_CODES.LOLLIPOP)
-    private List<Map<String, Object>> getAllUsageStats() {
+    private List<Map<String, Object>> getAllUsageStats(long selectedDate) {
         UsageStatsManager usageStatsManager = (UsageStatsManager) getSystemService(Context.USAGE_STATS_SERVICE);
         PackageManager packageManager = getPackageManager();
-        long currentTime = System.currentTimeMillis();
-        long endTime = getEndOfDay(currentTime);
-        long startTime = getStartOfDay();
+
+        // ✅ Get start and end time for the selected date
+        long startTime = getStartOfDay(selectedDate);
+        long endTime = getEndOfDay(selectedDate);
 
         UsageEvents usageEvents = usageStatsManager.queryEvents(startTime, endTime);
         Map<String, Long> appUsageMap = new HashMap<>();
@@ -160,7 +169,7 @@ public class MainActivity extends FlutterActivity {
 
         UsageEvents.Event event = new UsageEvents.Event();
 
-        // ✅ Collect screen time data
+        // ✅ Collect app screen time for that day
         while (usageEvents.hasNextEvent()) {
             usageEvents.getNextEvent(event);
             String packageName = event.getPackageName();
@@ -200,7 +209,7 @@ public class MainActivity extends FlutterActivity {
             finalUsageList.add(appUsage);
         }
 
-        // ✅ Sort apps by screen time (highest first)
+        // ✅ Sort by screen time (highest first)
         finalUsageList.sort((a, b) -> Long.compare((long) b.get("totalTimeInForeground"), (long) a.get("totalTimeInForeground")));
 
         return finalUsageList;
@@ -213,7 +222,8 @@ public class MainActivity extends FlutterActivity {
         UsageStatsManager usageStatsManager = (UsageStatsManager) getSystemService(Context.USAGE_STATS_SERVICE);
         PackageManager packageManager = getPackageManager();
         long endTime = System.currentTimeMillis();
-        long startTime = getStartOfDay(); // Midnight timestamp
+        long startTime = getStartOfDay(System.currentTimeMillis());
+        // Midnight timestamp
 
         UsageEvents usageEvents = usageStatsManager.queryEvents(startTime, endTime);
         Map<String, Long> appUsageMap = new HashMap<>();

@@ -26,13 +26,15 @@ class _ActivityScreenState extends State<ActivityScreen> {
 
   Future<void> _getAllUsageStats(DateTime date) async {
     try {
-      // Get total screen time
-      final int totalScreenTime =
-          await platform.invokeMethod('getTotalScreenTime');
+      final int timestamp =
+          date.millisecondsSinceEpoch; // Convert date to timestamp
 
-      // Get all apps' usage data
+      // Pass the selected date's timestamp
+      final int totalScreenTime =
+          await platform.invokeMethod('getTotalScreenTime', timestamp);
+
       final List<dynamic> usageStats =
-          await platform.invokeMethod('getAllUsageStats');
+          await platform.invokeMethod('getAllUsageStats', timestamp);
 
       setState(() {
         allApps = usageStats.map((app) {

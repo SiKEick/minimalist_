@@ -29,7 +29,11 @@ class _FocusModeHomePageState extends State<FocusModeHomePage> {
 
   Future<void> _getTotalScreenTime() async {
     try {
-      final int result = await platform.invokeMethod('getTotalScreenTime');
+      final int result = await platform.invokeMethod(
+        'getTotalScreenTime',
+        DateTime.now().millisecondsSinceEpoch, // Pass today's timestamp
+      );
+
       Duration duration = Duration(milliseconds: result);
       String formattedTime =
           "${duration.inHours}h ${duration.inMinutes.remainder(60)}m";
