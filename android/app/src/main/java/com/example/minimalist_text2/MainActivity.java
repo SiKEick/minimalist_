@@ -160,6 +160,7 @@ public class MainActivity extends FlutterActivity {
 
         UsageEvents.Event event = new UsageEvents.Event();
 
+        // ✅ Collect screen time data
         while (usageEvents.hasNextEvent()) {
             usageEvents.getNextEvent(event);
             String packageName = event.getPackageName();
@@ -175,30 +176,33 @@ public class MainActivity extends FlutterActivity {
             }
         }
 
+        // ✅ Get all installed apps
+        List<ApplicationInfo> installedApps = packageManager.getInstalledApplications(PackageManager.GET_META_DATA);
         List<Map<String, Object>> finalUsageList = new ArrayList<>();
 
-        for (Map.Entry<String, Long> entry : appUsageMap.entrySet()) {
-            try {
-                ApplicationInfo appInfo = packageManager.getApplicationInfo(entry.getKey(), 0);
-                if ((appInfo.flags & ApplicationInfo.FLAG_SYSTEM) != 0) continue; // ✅ Skip system apps
+        for (ApplicationInfo appInfo : installedApps) {
+            if ((appInfo.flags & ApplicationInfo.FLAG_SYSTEM) != 0) continue; // Skip system apps
 
-                String appName = packageManager.getApplicationLabel(appInfo).toString();
-                Drawable icon = packageManager.getApplicationIcon(appInfo);
-                String iconBase64 = bitmapToBase64(drawableToBitmap(icon));
+            String packageName = appInfo.packageName;
+            String appName = packageManager.getApplicationLabel(appInfo).toString();
+            Drawable icon = packageManager.getApplicationIcon(appInfo);
+            String iconBase64 = bitmapToBase64(drawableToBitmap(icon));
 
-                Map<String, Object> appUsage = new HashMap<>();
-                appUsage.put("appName", appName);
-                appUsage.put("packageName", entry.getKey());
-                appUsage.put("icon", iconBase64);
-                appUsage.put("totalTimeInForeground", entry.getValue());
+            // ✅ If app has screen time, use it; otherwise, set to 0
+            long screenTime = appUsageMap.getOrDefault(packageName, 0L);
 
-                finalUsageList.add(appUsage);
-            } catch (PackageManager.NameNotFoundException e) {
-                Log.e("DEBUG_USAGE_STATS", "App Not Found: " + entry.getKey());
-            }
+            Map<String, Object> appUsage = new HashMap<>();
+            appUsage.put("appName", appName);
+            appUsage.put("packageName", packageName);
+            appUsage.put("icon", iconBase64);
+            appUsage.put("totalTimeInForeground", screenTime);
+
+            finalUsageList.add(appUsage);
         }
 
+        // ✅ Sort apps by screen time (highest first)
         finalUsageList.sort((a, b) -> Long.compare((long) b.get("totalTimeInForeground"), (long) a.get("totalTimeInForeground")));
+
         return finalUsageList;
     }
 

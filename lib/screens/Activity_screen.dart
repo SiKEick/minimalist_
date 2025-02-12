@@ -97,7 +97,7 @@ class _ActivityScreenState extends State<ActivityScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text(
-          "Screen Time",
+          "Activity Details",
           style: TextStyle(fontSize: 27),
         ),
         backgroundColor: Colors.black,
