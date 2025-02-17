@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:minimalist_text2/screens/mode_function.dart'; // Import the new screen
 
 class ModeSelectionSheet extends StatefulWidget {
   final List<Map<String, String>> modes;
@@ -15,6 +16,17 @@ class ModeSelectionSheet extends StatefulWidget {
 }
 
 class _ModeSelectionSheetState extends State<ModeSelectionSheet> {
+  void _openModeFunctionScreen(String title, String subtitle) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ModeFunctionScreen(
+          modeTitle: title,
+        ),
+      ),
+    );
+  }
+
   void _addCustomMode() {
     showDialog(
       context: context,
@@ -79,7 +91,6 @@ class _ModeSelectionSheetState extends State<ModeSelectionSheet> {
                             ElevatedButton(
                               onPressed: () {
                                 if (newModeTitle.isNotEmpty) {
-                                  // Add the new mode to the list and update parent
                                   widget.updateModes([
                                     ...widget.modes,
                                     {
@@ -89,7 +100,7 @@ class _ModeSelectionSheetState extends State<ModeSelectionSheet> {
                                           : 'Custom mode.',
                                     }
                                   ]);
-                                  Navigator.pop(context); // Close dialog
+                                  Navigator.pop(context);
                                 }
                               },
                               child: Text('Add'),
@@ -149,7 +160,10 @@ class _ModeSelectionSheetState extends State<ModeSelectionSheet> {
                             style: TextStyle(color: Colors.grey),
                           ),
                           onTap: () {
-                            Navigator.pop(context);
+                            _openModeFunctionScreen(
+                              widget.modes[index]['title']!,
+                              widget.modes[index]['subtitle']!,
+                            );
                           },
                         );
                       }),
