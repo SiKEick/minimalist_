@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
+import 'package:device_apps/device_apps.dart';
 
 class ModeFunctionScreen extends StatefulWidget {
   final String modeTitle;
@@ -16,6 +17,32 @@ class ModeFunctionScreen extends StatefulWidget {
 class _ModeFunctionScreenState extends State<ModeFunctionScreen> {
   Duration _selectedDuration = Duration(minutes: 30); // Default duration
   final Duration _initialDuration = Duration(minutes: 30);
+
+  // List to hold installed apps names
+  List<String> _installedApps = [];
+
+  // A map to store the selection state of each app
+  Map<String, bool> _selectedApps = {};
+
+  @override
+  void initState() {
+    super.initState();
+    _getInstalledApps();
+  }
+
+  // Method to get the installed apps on the device
+  Future<void> _getInstalledApps() async {
+    List<Application> apps = await DeviceApps.getInstalledApplications(
+        includeSystemApps: false); // Exclude system apps
+    List<String> appNames = apps.map((app) => app.appName).toList();
+
+    setState(() {
+      _installedApps = appNames; // Store app names in _installedApps
+      _installedApps.forEach((app) {
+        _selectedApps[app] = false; // Initialize checkbox state for each app
+      });
+    });
+  }
 
   void _showTimePicker() {
     showCupertinoModalPopup(
@@ -155,17 +182,56 @@ class _ModeFunctionScreenState extends State<ModeFunctionScreen> {
                   fontWeight: FontWeight.bold,
                   color: Colors.white),
             ),
-            Spacer(),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.blue,
-                minimumSize: Size(double.infinity, 50),
-              ),
-              onPressed: () {
-                print("Proceed with ${_selectedDuration.inMinutes} min");
-              },
-              child: Text("Next: Select Apps to Block"),
-            ),
+            // Scrollable Card for distracting apps with checkboxes
+            _installedApps.isEmpty
+                ? Center(
+                    child:
+                        CircularProgressIndicator()) // Show loading indicator
+                : Expanded(
+                    child: Card(
+                      color: Colors.grey[900],
+                      child: Padding(
+                        padding: const EdgeInsets.all(16.0),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              "Distracting Apps",
+                              style: TextStyle(
+                                fontSize: 22,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                              ),
+                            ),
+                            SizedBox(height: 10),
+                            // Use a flexible widget so it takes up available space
+                            Expanded(
+                              child: SingleChildScrollView(
+                                child: Column(
+                                  children: _installedApps.map((app) {
+                                    return CheckboxListTile(
+                                      title: Text(
+                                        app,
+                                        style: TextStyle(color: Colors.white),
+                                      ),
+                                      value: _selectedApps[app],
+                                      onChanged: (bool? value) {
+                                        setState(() {
+                                          _selectedApps[app] = value!;
+                                        });
+                                      },
+                                      activeColor: Colors.blue,
+                                      checkColor: Colors.white,
+                                    );
+                                  }).toList(),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
           ],
         ),
       ),
