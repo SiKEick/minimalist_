@@ -140,10 +140,14 @@ class _FocusModeHomePageState extends State<FocusModeHomePage> {
                             child: Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                _infoColumn('SCREEN TIME', screenTime),
-                                _infoColumn('LAST HOUR', '-3.8%',
-                                    color: Colors.green),
-                                _infoColumn('PICKUPS', '20'),
+                                Expanded(
+                                    child:
+                                        _infoColumn('SCREEN TIME', screenTime)),
+                                Expanded(
+                                  child: _infoColumn('LAST HOUR', '-3.8%',
+                                      color: Colors.green),
+                                ),
+                                Expanded(child: _infoColumn('PICKUPS', '20')),
                               ],
                             ),
                           ),
