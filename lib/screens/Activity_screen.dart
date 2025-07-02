@@ -22,7 +22,6 @@ class _ActivityScreenState extends State<ActivityScreen> {
   @override
   void initState() {
     super.initState();
-    requestUsageAccessPermission();
     _getAllUsageStats(selectedDate);
   }
 
