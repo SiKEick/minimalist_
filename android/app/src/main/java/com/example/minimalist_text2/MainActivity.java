@@ -1,9 +1,14 @@
 package com.example.minimalist_text2;
+
 import android.app.usage.UsageEvents;
 import android.app.AppOpsManager;
 import android.app.usage.UsageStats;
 import android.app.usage.UsageStatsManager;
+import android.content.BroadcastReceiver;
 import android.content.Context;
+import android.content.Intent;
+import android.content.IntentFilter;
+import android.content.SharedPreferences;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
@@ -32,47 +37,64 @@ import io.flutter.plugin.common.MethodChannel;
 
 public class MainActivity extends FlutterActivity {
     private static final String CHANNEL = "com.example.app/usage";
+    private static final String PREFS_NAME = "PickupPrefs";
+    private static final String PICKUP_COUNT_KEY = "pickup_count";
 
     @Override
     public void configureFlutterEngine(@NonNull FlutterEngine flutterEngine) {
         super.configureFlutterEngine(flutterEngine);
+
+
         new MethodChannel(flutterEngine.getDartExecutor().getBinaryMessenger(), CHANNEL).setMethodCallHandler(
                 new MethodChannel.MethodCallHandler() {
                     @RequiresApi(api = Build.VERSION_CODES.LOLLIPOP)
                     @Override
                     public void onMethodCall(MethodCall call, MethodChannel.Result result) {
-                        if (call.method.equals("getUsageStats")) { // For Main Screen (Top 5)
-                            if (!isUsageAccessGranted()) {
-                                result.error("PERMISSION_DENIED", "Usage Access permission is not granted", null);
-                                return;
-                            }
-                            List<Map<String, Object>> usageStats = getUsageStats();
-                            result.success(usageStats);
-                        } else if (call.method.equals("getAllUsageStats")) {
-                            if (!isUsageAccessGranted()) {
-                                result.error("PERMISSION_DENIED", "Usage Access permission is not granted", null);
-                                return;
-                            }
-
-                            long selectedDate = call.arguments(); // Get timestamp from Flutter
-                            long startTime = getStartOfDay(selectedDate); // Pass timestamp to getStartOfDay()
-
-                            List<Map<String, Object>> allUsageStats = getAllUsageStats(startTime);
-                            result.success(allUsageStats);
-                        }
-                        else if (call.method.equals("getTotalScreenTime")) { // Common total screen time
-                            if (!isUsageAccessGranted()) {
-                                result.error("PERMISSION_DENIED", "Usage Access permission is not granted", null);
-                                return;
-                            }
-                            long selectedDate = call.arguments(); // Get timestamp from Flutter
-                            long totalScreenTime = getTotalScreenTime(selectedDate);
-                            result.success(totalScreenTime);
-                        } else {
-                            result.notImplemented();
+                        switch (call.method) {
+                            case "getUsageStats":
+                                if (!isUsageAccessGranted()) {
+                                    result.error("PERMISSION_DENIED", "Usage Access permission is not granted", null);
+                                    return;
+                                }
+                                result.success(getUsageStats());
+                                break;
+                            case "getAllUsageStats":
+                                if (!isUsageAccessGranted()) {
+                                    result.error("PERMISSION_DENIED", "Usage Access permission is not granted", null);
+                                    return;
+                                }
+                                long selectedDate = call.arguments();
+                                result.success(getAllUsageStats(getStartOfDay(selectedDate)));
+                                break;
+                            case "getTotalScreenTime":
+                                if (!isUsageAccessGranted()) {
+                                    result.error("PERMISSION_DENIED", "Usage Access permission is not granted", null);
+                                    return;
+                                }
+                                long todayDate = call.arguments();
+                                result.success(getTotalScreenTime(todayDate));
+                                break;
+                            case "getYesterdayScreenTime":
+                                if (!isUsageAccessGranted()) {
+                                    result.error("PERMISSION_DENIED", "Usage Access permission is not granted", null);
+                                    return;
+                                }
+                                Calendar cal = Calendar.getInstance();
+                                cal.add(Calendar.DATE, -1);
+                                long yesterdayStart = getStartOfDay(cal.getTimeInMillis()); // ✅ FIXED: ensure it's start of day
+                                long yesterdayScreenTime = getTotalScreenTime(yesterdayStart);
+                                Log.d("DEBUG_YESTERDAY", "Yesterday timestamp: " + yesterdayStart + ", screen time: " + yesterdayScreenTime);
+                                result.success(yesterdayScreenTime);
+                                break;
+                            case "getPickupCount":
+                                SharedPreferences prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
+                                int pickups = prefs.getInt(PICKUP_COUNT_KEY, 0);
+                                result.success(pickups);
+                                break;
+                            default:
+                                result.notImplemented();
                         }
                     }
-
                 }
         );
     }
@@ -89,8 +111,8 @@ public class MainActivity extends FlutterActivity {
         UsageStatsManager usageStatsManager = (UsageStatsManager) getSystemService(Context.USAGE_STATS_SERVICE);
         PackageManager packageManager = getPackageManager();
 
-        long startTime = getStartOfDay(timestamp); // Get midnight of selected date
-        long endTime = getEndOfDay(timestamp); // Get 23:59:59 of selected date
+        long startTime = getStartOfDay(timestamp);
+        long endTime = getEndOfDay(timestamp);
 
         UsageEvents usageEvents = usageStatsManager.queryEvents(startTime, endTime);
         Map<String, Long> appUsageMap = new HashMap<>();
@@ -106,7 +128,6 @@ public class MainActivity extends FlutterActivity {
                 appStartTimes.put(packageName, event.getTimeStamp());
             } else if (event.getEventType() == UsageEvents.Event.MOVE_TO_BACKGROUND && appStartTimes.containsKey(packageName)) {
                 long duration = event.getTimeStamp() - appStartTimes.get(packageName);
-
                 if (duration > 0) {
                     appUsageMap.put(packageName, appUsageMap.getOrDefault(packageName, 0L) + duration);
                 }
@@ -117,8 +138,6 @@ public class MainActivity extends FlutterActivity {
         for (Map.Entry<String, Long> entry : appUsageMap.entrySet()) {
             try {
                 ApplicationInfo appInfo = packageManager.getApplicationInfo(entry.getKey(), 0);
-
-                // ✅ Only count installed (non-system) apps
                 if ((appInfo.flags & ApplicationInfo.FLAG_SYSTEM) == 0) {
                     totalScreenTime += entry.getValue();
                 }
@@ -126,12 +145,8 @@ public class MainActivity extends FlutterActivity {
                 Log.e("DEBUG_TOTAL_SCREEN_TIME", "App Not Found: " + entry.getKey());
             }
         }
-
-        Log.d("DEBUG_FINAL_SCREEN_TIME", "Total Screen Time for " + timestamp + ": " + totalScreenTime);
         return totalScreenTime;
     }
-
-
 
     private long getStartOfDay(long timestamp) {
         Calendar calendar = Calendar.getInstance();
@@ -140,9 +155,8 @@ public class MainActivity extends FlutterActivity {
         calendar.set(Calendar.MINUTE, 0);
         calendar.set(Calendar.SECOND, 0);
         calendar.set(Calendar.MILLISECOND, 0);
-        return calendar.getTimeInMillis(); // Return midnight of selected date
+        return calendar.getTimeInMillis();
     }
-
 
     private long getEndOfDay(long timestamp) {
         Calendar calendar = Calendar.getInstance();
@@ -159,7 +173,6 @@ public class MainActivity extends FlutterActivity {
         UsageStatsManager usageStatsManager = (UsageStatsManager) getSystemService(Context.USAGE_STATS_SERVICE);
         PackageManager packageManager = getPackageManager();
 
-        // ✅ Get start and end time for the selected date
         long startTime = getStartOfDay(selectedDate);
         long endTime = getEndOfDay(selectedDate);
 
@@ -169,7 +182,6 @@ public class MainActivity extends FlutterActivity {
 
         UsageEvents.Event event = new UsageEvents.Event();
 
-        // ✅ Collect app screen time for that day
         while (usageEvents.hasNextEvent()) {
             usageEvents.getNextEvent(event);
             String packageName = event.getPackageName();
@@ -185,19 +197,17 @@ public class MainActivity extends FlutterActivity {
             }
         }
 
-        // ✅ Get all installed apps
         List<ApplicationInfo> installedApps = packageManager.getInstalledApplications(PackageManager.GET_META_DATA);
         List<Map<String, Object>> finalUsageList = new ArrayList<>();
 
         for (ApplicationInfo appInfo : installedApps) {
-            if ((appInfo.flags & ApplicationInfo.FLAG_SYSTEM) != 0) continue; // Skip system apps
+            if ((appInfo.flags & ApplicationInfo.FLAG_SYSTEM) != 0) continue;
 
             String packageName = appInfo.packageName;
             String appName = packageManager.getApplicationLabel(appInfo).toString();
             Drawable icon = packageManager.getApplicationIcon(appInfo);
             String iconBase64 = bitmapToBase64(drawableToBitmap(icon));
 
-            // ✅ If app has screen time, use it; otherwise, set to 0
             long screenTime = appUsageMap.getOrDefault(packageName, 0L);
 
             Map<String, Object> appUsage = new HashMap<>();
@@ -209,21 +219,17 @@ public class MainActivity extends FlutterActivity {
             finalUsageList.add(appUsage);
         }
 
-        // ✅ Sort by screen time (highest first)
         finalUsageList.sort((a, b) -> Long.compare((long) b.get("totalTimeInForeground"), (long) a.get("totalTimeInForeground")));
-
         return finalUsageList;
     }
-
-
 
     @RequiresApi(api = Build.VERSION_CODES.LOLLIPOP)
     private List<Map<String, Object>> getUsageStats() {
         UsageStatsManager usageStatsManager = (UsageStatsManager) getSystemService(Context.USAGE_STATS_SERVICE);
         PackageManager packageManager = getPackageManager();
+
         long endTime = System.currentTimeMillis();
         long startTime = getStartOfDay(System.currentTimeMillis());
-        // Midnight timestamp
 
         UsageEvents usageEvents = usageStatsManager.queryEvents(startTime, endTime);
         Map<String, Long> appUsageMap = new HashMap<>();
@@ -238,14 +244,11 @@ public class MainActivity extends FlutterActivity {
             if (event.getEventType() == UsageEvents.Event.MOVE_TO_FOREGROUND) {
                 appStartTimes.put(packageName, event.getTimeStamp());
             } else if (event.getEventType() == UsageEvents.Event.MOVE_TO_BACKGROUND && appStartTimes.containsKey(packageName)) {
-                long startTimeForApp = appStartTimes.get(packageName);
-                long usageDuration = event.getTimeStamp() - startTimeForApp;
-
+                long usageDuration = event.getTimeStamp() - appStartTimes.get(packageName);
                 if (usageDuration > 0) {
                     appUsageMap.put(packageName, appUsageMap.getOrDefault(packageName, 0L) + usageDuration);
                 }
-
-                appStartTimes.remove(packageName); // Remove after calculating
+                appStartTimes.remove(packageName);
             }
         }
 
@@ -253,9 +256,7 @@ public class MainActivity extends FlutterActivity {
         for (Map.Entry<String, Long> entry : appUsageMap.entrySet()) {
             try {
                 ApplicationInfo appInfo = packageManager.getApplicationInfo(entry.getKey(), 0);
-                if ((appInfo.flags & ApplicationInfo.FLAG_SYSTEM) != 0) {
-                    continue;
-                }
+                if ((appInfo.flags & ApplicationInfo.FLAG_SYSTEM) != 0) continue;
                 String appName = packageManager.getApplicationLabel(appInfo).toString();
                 Drawable icon = packageManager.getApplicationIcon(appInfo);
                 String iconBase64 = bitmapToBase64(drawableToBitmap(icon));
@@ -272,16 +273,13 @@ public class MainActivity extends FlutterActivity {
             }
         }
 
-        // Sort by usage time (highest first)
         finalUsageList.sort((a, b) -> Long.compare((long) b.get("totalTimeInForeground"), (long) a.get("totalTimeInForeground")));
-
         return finalUsageList;
     }
 
-
     private Bitmap drawableToBitmap(Drawable drawable) {
         if (drawable == null) {
-            return Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888); // Return a tiny blank bitmap
+            return Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888);
         }
         if (drawable instanceof BitmapDrawable) {
             return ((BitmapDrawable) drawable).getBitmap();

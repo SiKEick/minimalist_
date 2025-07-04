@@ -21,30 +21,47 @@ class _FocusModeHomePageState extends State<FocusModeHomePage> {
     {'title': 'EXERCISE MODE', 'subtitle': 'Track your workout.'},
   ];
   static const platform = MethodChannel('com.example.app/usage');
-  String screenTime = "Loading...";
+  String todayScreenTime = "Loading...";
+  String percentageChange = "Loading...";
+  String pickupCount = "Loading...";
 
   @override
   void initState() {
     super.initState();
-    _getTotalScreenTime();
+    _loadStats();
   }
 
-  Future<void> _getTotalScreenTime() async {
+  Future<void> _loadStats() async {
     try {
-      final int result = await platform.invokeMethod(
-        'getTotalScreenTime',
-        DateTime.now().millisecondsSinceEpoch, // Pass today's timestamp
-      );
+      final int todayMillis = await platform.invokeMethod(
+          'getTotalScreenTime', DateTime.now().millisecondsSinceEpoch);
 
-      Duration duration = Duration(milliseconds: result);
-      String formattedTime =
-          "${duration.inHours}h ${duration.inMinutes.remainder(60)}m";
+      DateTime yesterday = DateTime.now().subtract(Duration(days: 1));
+      final int yesterdayMillis =
+          await platform.invokeMethod('getYesterdayScreenTime');
+
+      final int pickups = await platform.invokeMethod('getPickupCount');
+
+      Duration todayDuration = Duration(milliseconds: todayMillis);
+      Duration yesterdayDuration = Duration(milliseconds: yesterdayMillis);
+
+      double percent = 0;
+      if (yesterdayMillis > 0) {
+        percent = ((todayMillis - yesterdayMillis) / yesterdayMillis) * 100;
+      }
+
       setState(() {
-        screenTime = formattedTime;
+        todayScreenTime =
+            "${todayDuration.inHours}h ${todayDuration.inMinutes.remainder(60)}m";
+        percentageChange =
+            (percent >= 0 ? "+" : "") + percent.toStringAsFixed(1) + "%";
+        pickupCount = pickups.toString();
       });
     } on PlatformException catch (e) {
       setState(() {
-        screenTime = "Failed to get screen time: ${e.message}";
+        todayScreenTime = "Error";
+        percentageChange = "Error";
+        pickupCount = "Error";
       });
     }
   }
@@ -135,13 +152,16 @@ class _FocusModeHomePageState extends State<FocusModeHomePage> {
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
                                 Expanded(
-                                    child:
-                                        _infoColumn('SCREEN TIME', screenTime)),
+                                    child: _infoColumn(
+                                        'SCREEN TIME', todayScreenTime)),
                                 Expanded(
-                                  child: _infoColumn('LAST HOUR', '-3.8%',
-                                      color: Colors.green),
+                                  child: _infoColumn('TODAY', percentageChange,
+                                      color: percentageChange.contains('-')
+                                          ? Colors.green
+                                          : Colors.red),
                                 ),
-                                Expanded(child: _infoColumn('PICKUPS', '20')),
+                                Expanded(
+                                    child: _infoColumn('PICKUPS', pickupCount)),
                               ],
                             ),
                           ),

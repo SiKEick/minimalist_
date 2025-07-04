@@ -4,6 +4,7 @@ import 'package:android_intent_plus/android_intent.dart';
 import 'package:android_intent_plus/flag.dart';
 import 'main_screen.dart';
 import 'package:minimalist_text2/screens/Name_input_screen.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class PermissionScreen extends StatefulWidget {
   const PermissionScreen({super.key});
@@ -34,11 +35,24 @@ class _PermissionScreenState extends State<PermissionScreen> {
     }
   }
 
-  void _navigateToHome() {
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(builder: (_) => const NameInputScreen()),
-    );
+  void _navigateToHome() async {
+    final prefs = await SharedPreferences.getInstance();
+    final String? name = prefs.getString('user_name');
+    if (name != null && name.isNotEmpty) {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (_) => FocusModeHomePage(userName: name),
+        ),
+      );
+    } else {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (_) => NameInputScreen(),
+        ),
+      );
+    }
   }
 
   void _openSettings() {

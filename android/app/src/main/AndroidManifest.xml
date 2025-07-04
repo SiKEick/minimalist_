@@ -11,6 +11,13 @@
         android:icon="@mipmap/ic_launcher"
         android:enableOnBackInvokedCallback="true">
 
+        <receiver android:name=".ScreenUnlockReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.USER_PRESENT" />
+            </intent-filter>
+        </receiver>
+
         <activity
             android:name=".MainActivity"
             android:exported="true"

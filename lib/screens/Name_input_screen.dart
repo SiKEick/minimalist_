@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'main_screen.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class NameInputScreen extends StatefulWidget {
   const NameInputScreen({super.key});
@@ -11,12 +12,16 @@ class NameInputScreen extends StatefulWidget {
 class _NameInputScreenState extends State<NameInputScreen> {
   final TextEditingController _controller = TextEditingController();
 
-  void _submitName() {
-    if (_controller.text.trim().isNotEmpty) {
+  void _submitName() async {
+    String name = _controller.text.trim();
+    if (name.isNotEmpty) {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('user_name', name); // Save the name
+
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
-          builder: (_) => FocusModeHomePage(userName: _controller.text.trim()),
+          builder: (_) => FocusModeHomePage(userName: name),
         ),
       );
     }
