@@ -82,7 +82,10 @@ class _Top5AppState extends State<Top5App> {
           children: [
             Text(
               'Activity Details',
-              style: TextStyle(color: Colors.white, fontSize: 22),
+              style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold),
             ),
             TextButton(
               onPressed: () {

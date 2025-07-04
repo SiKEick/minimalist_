@@ -3,6 +3,7 @@ import 'package:usage_stats/usage_stats.dart';
 import 'package:android_intent_plus/android_intent.dart';
 import 'package:android_intent_plus/flag.dart';
 import 'main_screen.dart';
+import 'package:minimalist_text2/screens/Name_input_screen.dart';
 
 class PermissionScreen extends StatefulWidget {
   const PermissionScreen({super.key});
@@ -36,7 +37,7 @@ class _PermissionScreenState extends State<PermissionScreen> {
   void _navigateToHome() {
     Navigator.pushReplacement(
       context,
-      MaterialPageRoute(builder: (_) => const FocusModeHomePage()),
+      MaterialPageRoute(builder: (_) => const NameInputScreen()),
     );
   }
 

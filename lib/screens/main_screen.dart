@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:minimalist_text2/screens/mode_selection.dart';
 import 'package:minimalist_text2/Top5App.dart';
 import 'package:flutter/services.dart';
+import 'package:minimalist_text2/screens/Name_input_screen.dart';
 
 class FocusModeHomePage extends StatefulWidget {
-  const FocusModeHomePage({super.key});
+  final String userName;
+  const FocusModeHomePage({super.key, required this.userName});
   static const String id = 'FocusModeHomePage';
 
   @override
@@ -104,26 +106,18 @@ class _FocusModeHomePageState extends State<FocusModeHomePage> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  'Morning, Jane.',
+                                  'Welcome,',
                                   style: TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 35,
-                                  ),
-                                ),
-                                SizedBox(height: 4),
-                                Text(
-                                  '9.3',
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 48,
-                                  ),
+                                      color: Colors.white,
+                                      fontSize: 35,
+                                      fontWeight: FontWeight.bold),
                                 ),
                                 Text(
-                                  'DEEP FOCUS',
+                                  '${widget.userName}',
                                   style: TextStyle(
-                                    color: Colors.grey,
-                                    fontSize: 16,
-                                  ),
+                                      color: Colors.white,
+                                      fontSize: 35,
+                                      fontWeight: FontWeight.bold),
                                 ),
                               ],
                             ),
@@ -172,41 +166,28 @@ class _FocusModeHomePageState extends State<FocusModeHomePage> {
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(16),
                             ),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Padding(
-                                  padding: EdgeInsets.all(16.0),
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        'FOCUS MODE',
-                                        style: TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 24,
-                                        ),
-                                      ),
-                                      Text(
-                                        'Last Focused 21 minutes ago',
-                                        style: TextStyle(
-                                          color: Colors.grey,
-                                          fontSize: 16,
-                                        ),
-                                      ),
-                                    ],
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 16.0, vertical: 8.0),
+                              child: Row(
+                                children: [
+                                  Text(
+                                    'Focus Mode',
+                                    style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 30,
+                                        fontWeight: FontWeight.bold),
                                   ),
-                                ),
-                                IconButton(
-                                  padding: EdgeInsets.fromLTRB(0, 0, 16, 0),
-                                  onPressed: () => ShowModeSelection(context),
-                                  icon: Icon(Icons.play_circle_fill),
-                                  color: Colors.white,
-                                  highlightColor: Colors.grey[900],
-                                  iconSize: 60,
-                                ),
-                              ],
+                                  Spacer(),
+                                  IconButton(
+                                    onPressed: () => ShowModeSelection(context),
+                                    icon: Icon(Icons.play_circle_fill),
+                                    color: Colors.white,
+                                    iconSize: 60,
+                                    highlightColor: Colors.grey[900],
+                                  ),
+                                ],
+                              ),
                             ),
                           ),
                         ),
