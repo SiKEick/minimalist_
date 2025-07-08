@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:minimalist_text2/screens/mode_selection.dart';
+import 'package:minimalist_text2/screens/mode_function.dart';
 import 'package:minimalist_text2/Top5App.dart';
 import 'package:flutter/services.dart';
 import 'package:minimalist_text2/screens/Name_input_screen.dart';
@@ -71,22 +71,6 @@ class _FocusModeHomePageState extends State<FocusModeHomePage> {
     setState(() {
       modes = newModes;
     });
-  }
-
-  void ShowModeSelection(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
-      backgroundColor: Colors.grey[900],
-      builder: (BuildContext context) {
-        return ModeSelectionSheet(
-          modes: modes, // Pass the modes list
-          updateModes: _updateModes, // Pass the updateModes function
-        );
-      },
-    );
   }
 
   @override
@@ -200,7 +184,16 @@ class _FocusModeHomePageState extends State<FocusModeHomePage> {
                                   ),
                                   Spacer(),
                                   IconButton(
-                                    onPressed: () => ShowModeSelection(context),
+                                    onPressed: () {
+                                      Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (context) =>
+                                              ModeFunctionScreen(
+                                                  modeTitle: 'FOCUS MODE'),
+                                        ),
+                                      );
+                                    },
                                     icon: Icon(Icons.play_circle_fill),
                                     color: Colors.white,
                                     iconSize: 60,
