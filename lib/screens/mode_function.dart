@@ -1,46 +1,91 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:device_apps/device_apps.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 class ModeFunctionScreen extends StatefulWidget {
   final String modeTitle;
-
-  const ModeFunctionScreen({
-    Key? key,
-    required this.modeTitle,
-  }) : super(key: key);
+  const ModeFunctionScreen({Key? key, required this.modeTitle})
+      : super(key: key);
 
   @override
   _ModeFunctionScreenState createState() => _ModeFunctionScreenState();
 }
 
 class _ModeFunctionScreenState extends State<ModeFunctionScreen> {
-  Duration _selectedDuration = Duration(minutes: 30); // Default duration
+  Duration _selectedDuration = Duration(minutes: 30);
   final Duration _initialDuration = Duration(minutes: 30);
-
-  // List to hold installed apps names
-  List<String> _installedApps = [];
-
-  // A map to store the selection state of each app
+  static const MethodChannel _platform = MethodChannel('focus_mode_channel');
+  final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
+  List<Application> _installedApps = [];
   Map<String, bool> _selectedApps = {};
+  bool _isModeActive = false;
+  int _remainingSeconds = 0;
+  Timer? _countdownTimer;
+  String? _savedPassword;
 
   @override
   void initState() {
     super.initState();
     _getInstalledApps();
+    _loadModeState();
   }
 
-  // Method to get the installed apps on the device
   Future<void> _getInstalledApps() async {
     List<Application> apps = await DeviceApps.getInstalledApplications(
-        includeSystemApps: false); // Exclude system apps
-    List<String> appNames = apps.map((app) => app.appName).toList();
-
+      includeSystemApps: false,
+    );
     setState(() {
-      _installedApps = appNames; // Store app names in _installedApps
-      _installedApps.forEach((app) {
-        _selectedApps[app] = false; // Initialize checkbox state for each app
+      _installedApps = apps;
+      for (var app in apps) {
+        _selectedApps[app.packageName] = false;
+      }
+    });
+  }
+
+  Future<void> _loadModeState() async {
+    String? active = await _secureStorage.read(key: "isModeActive");
+    if (active == "true") {
+      String? remaining = await _secureStorage.read(key: "remainingTime");
+      String? password = await _secureStorage.read(key: "focus_password");
+      setState(() {
+        _isModeActive = true;
+        _remainingSeconds = int.tryParse(remaining ?? "0") ?? 0;
+        _savedPassword = password;
       });
+      if (_remainingSeconds > 0) {
+        _startCountdownTimer();
+      }
+    }
+  }
+
+  Future<void> _saveModeState() async {
+    await _secureStorage.write(
+        key: "isModeActive", value: _isModeActive.toString());
+    await _secureStorage.write(
+        key: "remainingTime", value: _remainingSeconds.toString());
+  }
+
+  Future<void> _clearModeState() async {
+    await _secureStorage.delete(key: "isModeActive");
+    await _secureStorage.delete(key: "remainingTime");
+    await _secureStorage.delete(key: "focus_password");
+  }
+
+  void _startCountdownTimer() {
+    _countdownTimer?.cancel();
+    _countdownTimer = Timer.periodic(Duration(seconds: 1), (timer) async {
+      if (_remainingSeconds > 0) {
+        setState(() {
+          _remainingSeconds--;
+        });
+        _saveModeState();
+      } else {
+        timer.cancel();
+        await _stopFocusMode();
+      }
     });
   }
 
@@ -49,75 +94,59 @@ class _ModeFunctionScreenState extends State<ModeFunctionScreen> {
       context: context,
       builder: (context) => WillPopScope(
         onWillPop: () async {
-          // Reset to the initial duration when the back button is pressed
           setState(() {
             _selectedDuration = _initialDuration;
           });
           Navigator.pop(context);
-          return false; // Prevent the modal from closing by default
+          return false;
         },
-        child: GestureDetector(
-          onTap: () {}, // Prevent tapping outside to close the modal
-          child: Container(
-            height: 250,
-            color: Colors.black,
-            child: GestureDetector(
-              onTap:
-                  () {}, // Prevent tapping inside the timer picker from closing it
-              child: Column(
+        child: Container(
+          height: 250,
+          color: Colors.black,
+          child: Column(
+            children: [
+              SizedBox(
+                height: 200,
+                child: CupertinoTimerPicker(
+                  mode: CupertinoTimerPickerMode.hm,
+                  initialTimerDuration: _selectedDuration,
+                  onTimerDurationChanged: (Duration newDuration) {
+                    setState(() {
+                      _selectedDuration = newDuration;
+                    });
+                  },
+                ),
+              ),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                 children: [
-                  SizedBox(
-                    height: 200,
-                    child: CupertinoTimerPicker(
-                      mode: CupertinoTimerPickerMode.hm, // Hours and minutes
-                      initialTimerDuration: _selectedDuration,
-                      onTimerDurationChanged: (Duration newDuration) {
-                        setState(() {
-                          _selectedDuration = newDuration;
-                        });
-                      },
-                    ),
+                  TextButton(
+                    onPressed: () {
+                      setState(() {
+                        _selectedDuration = _initialDuration;
+                      });
+                      Navigator.pop(context);
+                    },
+                    child: const Text("Cancel",
+                        style: TextStyle(color: Colors.red, fontSize: 18)),
                   ),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    children: [
-                      // Cancel button: Reset to initial time
-                      TextButton(
-                        onPressed: () {
-                          setState(() {
-                            _selectedDuration = _initialDuration;
-                          });
-                          Navigator.pop(context); // Close the modal
-                        },
-                        child: Text(
-                          "Cancel",
-                          style: TextStyle(color: Colors.red, fontSize: 18),
-                        ),
-                      ),
-                      // OK button: Validate and keep the selected time
-                      TextButton(
-                        onPressed: () {
-                          if (_selectedDuration < _initialDuration) {
-                            // Show warning if time is less than 30 minutes
-                            _showTimeWarning();
-                            setState(() {
-                              _selectedDuration =
-                                  _initialDuration; // Reset to initial time
-                            });
-                          } else {
-                            Navigator.pop(context); // Close the modal
-                          }
-                        },
-                        child: Text(
-                          "OK",
-                          style: TextStyle(color: Colors.blue, fontSize: 18),
-                        ),
-                      ),
-                    ],
+                  TextButton(
+                    onPressed: () {
+                      if (_selectedDuration < _initialDuration) {
+                        _showTimeWarning();
+                        setState(() {
+                          _selectedDuration = _initialDuration;
+                        });
+                      } else {
+                        Navigator.pop(context);
+                      }
+                    },
+                    child: const Text("OK",
+                        style: TextStyle(color: Colors.blue, fontSize: 18)),
                   ),
                 ],
               ),
-            ),
+            ],
           ),
         ),
       ),
@@ -128,18 +157,165 @@ class _ModeFunctionScreenState extends State<ModeFunctionScreen> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text("Invalid Time"),
-        content: Text("Time can't be set to less than 30 minutes."),
+        title: const Text("Invalid Time"),
+        content: const Text("Time can't be set to less than 30 minutes."),
         actions: [
           TextButton(
-            onPressed: () {
-              Navigator.pop(context); // Close the warning dialog
-            },
-            child: Text("OK"),
+            onPressed: () => Navigator.pop(context),
+            child: const Text("OK"),
           ),
         ],
       ),
     );
+  }
+
+  Future<void> _startFocusMode() async {
+    if (_isModeActive) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Focus Mode is already running!")),
+      );
+      return;
+    }
+
+    List<String> blockedApps = _selectedApps.entries
+        .where((entry) => entry.value)
+        .map((entry) => entry.key)
+        .toList();
+    if (blockedApps.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Please select at least one app.")),
+      );
+      return;
+    }
+
+    String? password = await _askPassword();
+    if (password == null || password.isEmpty) return;
+
+    await _secureStorage.write(key: "focus_password", value: password);
+
+    setState(() {
+      _isModeActive = true;
+      _remainingSeconds = _selectedDuration.inSeconds;
+      _savedPassword = password;
+    });
+
+    _saveModeState();
+    _startCountdownTimer();
+
+    try {
+      await _platform.invokeMethod('startFocusMode', {
+        'password': password,
+        'blockedApps': blockedApps,
+        'duration': _selectedDuration.inSeconds,
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Focus Mode Started!")),
+      );
+    } catch (e) {
+      print("Error starting focus mode: $e");
+    }
+  }
+
+  Future<void> _stopFocusMode() async {
+    TextEditingController controller = TextEditingController();
+
+    String? enteredPassword = await showDialog<String>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text("Enter Password to Stop"),
+          content: TextField(
+            controller: controller,
+            obscureText: true,
+            decoration: const InputDecoration(hintText: "Enter your password"),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text("Cancel"),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context, controller.text);
+              },
+              child: const Text("OK"),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (enteredPassword == null || enteredPassword.isEmpty) {
+      return; // User canceled
+    }
+
+    // Validate password
+    if (enteredPassword == _savedPassword) {
+      setState(() {
+        _isModeActive = false;
+        _remainingSeconds = 0;
+        _savedPassword = null;
+      });
+      _countdownTimer?.cancel();
+      await _clearModeState();
+
+      try {
+        await _platform.invokeMethod('stopFocusMode');
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Focus Mode Stopped.")),
+        );
+      } catch (e) {
+        print("Error stopping focus mode: $e");
+      }
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Incorrect password!")),
+      );
+    }
+  }
+
+  Future<String?> _askPassword() async {
+    TextEditingController controller = TextEditingController();
+    return showDialog<String>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text("Set Focus Mode Password"),
+          content: TextField(
+            controller: controller,
+            obscureText: true,
+            decoration: const InputDecoration(hintText: "Enter password"),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text("Cancel"),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context, controller.text);
+              },
+              child: const Text("OK"),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  String _formatTime(int totalSeconds) {
+    int hours = totalSeconds ~/ 3600;
+    int minutes = (totalSeconds % 3600) ~/ 60;
+    int seconds = totalSeconds % 60;
+    return "${hours.toString().padLeft(2, '0')}:"
+        "${minutes.toString().padLeft(2, '0')}:"
+        "${seconds.toString().padLeft(2, '0')}";
+  }
+
+  @override
+  void dispose() {
+    _countdownTimer?.cancel();
+    super.dispose();
   }
 
   @override
@@ -157,7 +333,7 @@ class _ModeFunctionScreenState extends State<ModeFunctionScreen> {
             Stack(
               alignment: Alignment.center,
               children: [
-                Center(
+                const Center(
                   child: Text(
                     "Set Timer",
                     style: TextStyle(
@@ -169,24 +345,23 @@ class _ModeFunctionScreenState extends State<ModeFunctionScreen> {
                 Positioned(
                   right: 0,
                   child: IconButton(
-                    icon: Icon(Icons.edit, color: Colors.blue),
+                    icon: const Icon(Icons.edit, color: Colors.blue),
                     onPressed: _showTimePicker,
                   ),
                 ),
               ],
             ),
             Text(
-              "${_selectedDuration.inHours.toString().padLeft(2, '0')}:${(_selectedDuration.inMinutes % 60).toString().padLeft(2, '0')}",
-              style: TextStyle(
+              _isModeActive
+                  ? _formatTime(_remainingSeconds)
+                  : "${_selectedDuration.inHours.toString().padLeft(2, '0')}:${(_selectedDuration.inMinutes % 60).toString().padLeft(2, '0')}",
+              style: const TextStyle(
                   fontSize: 48,
                   fontWeight: FontWeight.bold,
                   color: Colors.white),
             ),
-            // Scrollable Card for distracting apps with checkboxes
             _installedApps.isEmpty
-                ? Center(
-                    child:
-                        CircularProgressIndicator()) // Show loading indicator
+                ? const Center(child: CircularProgressIndicator())
                 : Expanded(
                     child: Card(
                       color: Colors.grey[900],
@@ -195,31 +370,33 @@ class _ModeFunctionScreenState extends State<ModeFunctionScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(
+                            const Text(
                               "Distracting Apps",
                               style: TextStyle(
-                                fontSize: 22,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.white,
-                              ),
+                                  fontSize: 22,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.white),
                             ),
-                            SizedBox(height: 10),
-                            // Use a flexible widget so it takes up available space
+                            const SizedBox(height: 10),
                             Expanded(
                               child: SingleChildScrollView(
                                 child: Column(
                                   children: _installedApps.map((app) {
                                     return CheckboxListTile(
                                       title: Text(
-                                        app,
-                                        style: TextStyle(color: Colors.white),
+                                        app.appName,
+                                        style: const TextStyle(
+                                            color: Colors.white),
                                       ),
-                                      value: _selectedApps[app],
-                                      onChanged: (bool? value) {
-                                        setState(() {
-                                          _selectedApps[app] = value!;
-                                        });
-                                      },
+                                      value: _selectedApps[app.packageName],
+                                      onChanged: _isModeActive
+                                          ? null
+                                          : (bool? value) {
+                                              setState(() {
+                                                _selectedApps[app.packageName] =
+                                                    value!;
+                                              });
+                                            },
                                       activeColor: Colors.blue,
                                       checkColor: Colors.white,
                                     );
@@ -231,6 +408,26 @@ class _ModeFunctionScreenState extends State<ModeFunctionScreen> {
                         ),
                       ),
                     ),
+                  ),
+            const SizedBox(height: 20),
+            _isModeActive
+                ? ElevatedButton(
+                    onPressed: _stopFocusMode,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.red,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 40, vertical: 15),
+                    ),
+                    child: const Text("Stop Focus Mode"),
+                  )
+                : ElevatedButton(
+                    onPressed: _startFocusMode,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.blue,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 40, vertical: 15),
+                    ),
+                    child: const Text("Start Focus Mode"),
                   ),
           ],
         ),

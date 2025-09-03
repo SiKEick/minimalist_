@@ -1,5 +1,10 @@
 package com.example.minimalist_text2;
+import android.content.Intent;
+import android.os.Bundle;
 
+import io.flutter.embedding.android.FlutterActivity;
+import io.flutter.embedding.engine.FlutterEngine;
+import io.flutter.plugin.common.MethodChannel;
 import android.app.usage.UsageEvents;
 import android.app.AppOpsManager;
 import android.app.usage.UsageStats;
@@ -39,6 +44,7 @@ public class MainActivity extends FlutterActivity {
     private static final String CHANNEL = "com.example.app/usage";
     private static final String PREFS_NAME = "PickupPrefs";
     private static final String PICKUP_COUNT_KEY = "pickup_count";
+    private static final String FOCUS_CHANNEL = "focus_mode_channel";
 
     @Override
     public void configureFlutterEngine(@NonNull FlutterEngine flutterEngine) {
@@ -97,6 +103,29 @@ public class MainActivity extends FlutterActivity {
                     }
                 }
         );
+        new MethodChannel(flutterEngine.getDartExecutor().getBinaryMessenger(), FOCUS_CHANNEL)
+                .setMethodCallHandler((call, result) -> {
+                    if (call.method.equals("startFocusMode")) {
+                        String password = call.argument("password");
+                        ArrayList<String> blockedApps = call.argument("blockedApps");
+                        int durationInSeconds = call.argument("duration");
+
+                        Intent serviceIntent = new Intent(this, ForegroundMonitorService.class);
+                        serviceIntent.putExtra("password", password);
+                        serviceIntent.putStringArrayListExtra("blockedApps", blockedApps);
+                        serviceIntent.putExtra("duration", durationInSeconds);
+
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                            startForegroundService(serviceIntent);
+                        } else {
+                            startService(serviceIntent);
+                        }
+                        result.success(true);
+                    } else {
+                        result.notImplemented();
+                    }
+                });
+
     }
 
     private boolean isUsageAccessGranted() {
