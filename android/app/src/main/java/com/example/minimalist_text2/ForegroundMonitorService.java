@@ -11,6 +11,10 @@ import android.os.Build;
 import android.os.Handler;
 import android.os.IBinder;
 import android.util.Log;
+import android.app.ActivityManager;
+import android.app.ActivityManager.RunningAppProcessInfo;
+import java.util.List;
+
 
 import androidx.annotation.Nullable;
 import androidx.core.app.NotificationCompat;
@@ -89,21 +93,14 @@ public class ForegroundMonitorService extends Service {
     }
 
     private String getForegroundApp() {
-        UsageStatsManager usageStatsManager = (UsageStatsManager) getSystemService(USAGE_STATS_SERVICE);
-        long endTime = System.currentTimeMillis();
-        long beginTime = endTime - 2000;
-
-        UsageEvents usageEvents = usageStatsManager.queryEvents(beginTime, endTime);
-        UsageEvents.Event event = new UsageEvents.Event();
-        String packageName = "";
-        while (usageEvents.hasNextEvent()) {
-            usageEvents.getNextEvent(event);
-            if (event.getEventType() == UsageEvents.Event.MOVE_TO_FOREGROUND) {
-                packageName = event.getPackageName();
+        ActivityManager activityManager = (ActivityManager) getSystemService(ACTIVITY_SERVICE);
+        List<RunningAppProcessInfo> appProcesses = activityManager.getRunningAppProcesses();
+        for (RunningAppProcessInfo appProcess : appProcesses) {
+            if (appProcess.importance == RunningAppProcessInfo.IMPORTANCE_FOREGROUND) {
+                return appProcess.processName;
             }
         }
-        Log.d(TAG, "Detected Foreground Package: " + packageName);
-        return packageName;
+        return "";
     }
 
     private Notification getNotification() {
