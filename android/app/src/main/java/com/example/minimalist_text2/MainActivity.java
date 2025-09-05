@@ -6,6 +6,9 @@ import io.flutter.embedding.android.FlutterActivity;
 import io.flutter.embedding.engine.FlutterEngine;
 import io.flutter.plugin.common.MethodChannel;
 import android.app.usage.UsageEvents;
+import android.provider.Settings;
+import android.net.Uri;
+
 import android.app.AppOpsManager;
 import android.app.usage.UsageStats;
 import android.app.usage.UsageStatsManager;
@@ -45,6 +48,8 @@ public class MainActivity extends FlutterActivity {
     private static final String PREFS_NAME = "PickupPrefs";
     private static final String PICKUP_COUNT_KEY = "pickup_count";
     private static final String FOCUS_CHANNEL = "focus_mode_channel";
+    private static final String OVERLAY_CHANNEL = "overlay_permission_channel";
+    private static final int REQUEST_OVERLAY_PERMISSION = 1001;
 
     @Override
     public void configureFlutterEngine(@NonNull FlutterEngine flutterEngine) {
@@ -125,7 +130,46 @@ public class MainActivity extends FlutterActivity {
                         result.notImplemented();
                     }
                 });
+        new MethodChannel(flutterEngine.getDartExecutor().getBinaryMessenger(), OVERLAY_CHANNEL)
+                .setMethodCallHandler((call, result) -> {
+                    if (call.method.equals("hasOverlayPermission")) {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                            result.success(Settings.canDrawOverlays(this));
+                        } else {
+                            result.success(true);
+                        }
+                    } else if (call.method.equals("requestOverlayPermission")) {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                            if (!Settings.canDrawOverlays(this)) {
+                                Intent intent = new Intent(
+                                        Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                                        Uri.parse("package:" + getPackageName()));
+                                startActivityForResult(intent, REQUEST_OVERLAY_PERMISSION);
+                            }
+                        }
+                        result.success(null);
+                    } else {
+                        result.notImplemented();
+                    }
+                });
 
+
+    }
+    private boolean hasOverlayPermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            return Settings.canDrawOverlays(this);
+        }
+        return true;
+    }
+
+    private void requestOverlayPermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            if (!Settings.canDrawOverlays(this)) {
+                Intent intent = new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                        Uri.parse("package:" + getPackageName()));
+                startActivityForResult(intent, REQUEST_OVERLAY_PERMISSION);
+            }
+        }
     }
 
     private boolean isUsageAccessGranted() {
@@ -327,4 +371,5 @@ public class MainActivity extends FlutterActivity {
         byte[] byteArray = byteArrayOutputStream.toByteArray();
         return Base64.encodeToString(byteArray, Base64.NO_WRAP);
     }
+
 }
