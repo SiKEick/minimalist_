@@ -19,12 +19,17 @@ class _ModeFunctionScreenState extends State<ModeFunctionScreen> {
   final Duration _initialDuration = Duration(minutes: 30);
   static const MethodChannel _platform = MethodChannel('focus_mode_channel');
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
-  List<Application> _installedApps = [];
+
+  List<Application> _allInstalledApps = []; // Full app list
+  List<Application> _installedApps = []; // Filtered list
   Map<String, bool> _selectedApps = {};
   bool _isModeActive = false;
   int _remainingSeconds = 0;
   Timer? _countdownTimer;
   String? _savedPassword;
+
+  TextEditingController _searchController = TextEditingController();
+  String _searchQuery = "";
 
   @override
   void initState() {
@@ -38,10 +43,23 @@ class _ModeFunctionScreenState extends State<ModeFunctionScreen> {
       includeSystemApps: false,
     );
     setState(() {
+      _allInstalledApps = apps;
       _installedApps = apps;
       for (var app in apps) {
         _selectedApps[app.packageName] = false;
       }
+    });
+  }
+
+  void _filterApps(String query) {
+    setState(() {
+      _searchQuery = query.toLowerCase();
+      List<Application> filtered = _allInstalledApps.where((app) {
+        return app.appName.toLowerCase().contains(_searchQuery);
+      }).toList();
+
+      // If nothing matches, show full list
+      _installedApps = filtered.isEmpty ? _allInstalledApps : filtered;
     });
   }
 
@@ -245,11 +263,8 @@ class _ModeFunctionScreenState extends State<ModeFunctionScreen> {
       },
     );
 
-    if (enteredPassword == null || enteredPassword.isEmpty) {
-      return; // User canceled
-    }
+    if (enteredPassword == null || enteredPassword.isEmpty) return;
 
-    // Validate password
     if (enteredPassword == _savedPassword) {
       setState(() {
         _isModeActive = false;
@@ -315,6 +330,7 @@ class _ModeFunctionScreenState extends State<ModeFunctionScreen> {
   @override
   void dispose() {
     _countdownTimer?.cancel();
+    _searchController.dispose();
     super.dispose();
   }
 
@@ -378,31 +394,60 @@ class _ModeFunctionScreenState extends State<ModeFunctionScreen> {
                                   color: Colors.white),
                             ),
                             const SizedBox(height: 10),
-                            Expanded(
-                              child: SingleChildScrollView(
-                                child: Column(
-                                  children: _installedApps.map((app) {
-                                    return CheckboxListTile(
-                                      title: Text(
-                                        app.appName,
-                                        style: const TextStyle(
-                                            color: Colors.white),
-                                      ),
-                                      value: _selectedApps[app.packageName],
-                                      onChanged: _isModeActive
-                                          ? null
-                                          : (bool? value) {
-                                              setState(() {
-                                                _selectedApps[app.packageName] =
-                                                    value!;
-                                              });
-                                            },
-                                      activeColor: Colors.blue,
-                                      checkColor: Colors.white,
-                                    );
-                                  }).toList(),
+                            TextField(
+                              controller: _searchController,
+                              onChanged: _filterApps,
+                              style: const TextStyle(color: Colors.white),
+                              decoration: InputDecoration(
+                                hintText: "Search apps",
+                                hintStyle: TextStyle(color: Colors.grey[500]),
+                                prefixIcon: const Icon(Icons.search,
+                                    color: Colors.white),
+                                filled: true,
+                                fillColor: Colors.grey[800],
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                  borderSide: BorderSide.none,
                                 ),
                               ),
+                            ),
+                            const SizedBox(height: 10),
+                            Expanded(
+                              child: _allInstalledApps.isEmpty
+                                  ? const Center(
+                                      child: CircularProgressIndicator())
+                                  : _installedApps.isEmpty
+                                      ? const Center(
+                                          child: Text(
+                                            "No apps found",
+                                            style:
+                                                TextStyle(color: Colors.white),
+                                          ),
+                                        )
+                                      : ListView(
+                                          children: _installedApps.map((app) {
+                                            return CheckboxListTile(
+                                              title: Text(
+                                                app.appName,
+                                                style: const TextStyle(
+                                                    color: Colors.white),
+                                              ),
+                                              value: _selectedApps[
+                                                  app.packageName],
+                                              onChanged: _isModeActive
+                                                  ? null
+                                                  : (bool? value) {
+                                                      setState(() {
+                                                        _selectedApps[app
+                                                                .packageName] =
+                                                            value!;
+                                                      });
+                                                    },
+                                              activeColor: Colors.blue,
+                                              checkColor: Colors.white,
+                                            );
+                                          }).toList(),
+                                        ),
                             ),
                           ],
                         ),
