@@ -36,17 +36,22 @@ class _ModeFunctionScreenState extends State<ModeFunctionScreen> {
     super.initState();
     _getInstalledApps();
     _loadModeState();
+    _updateRemainingTime();
   }
 
   Future<void> _getInstalledApps() async {
     List<Application> apps = await DeviceApps.getInstalledApplications(
       includeSystemApps: false,
     );
+    String? blockedAppsStr = await _secureStorage.read(key: "blockedApps");
+    List<String> blockedApps = blockedAppsStr?.split(',') ?? [];
+
     setState(() {
       _allInstalledApps = apps;
       _installedApps = apps;
+      _selectedApps = {}; // reset
       for (var app in apps) {
-        _selectedApps[app.packageName] = false;
+        _selectedApps[app.packageName] = blockedApps.contains(app.packageName);
       }
     });
   }
@@ -68,6 +73,8 @@ class _ModeFunctionScreenState extends State<ModeFunctionScreen> {
     if (active == "true") {
       String? remaining = await _secureStorage.read(key: "remainingTime");
       String? password = await _secureStorage.read(key: "focus_password");
+      String? blockedAppsStr = await _secureStorage.read(key: "blockedApps");
+      List<String> blockedApps = blockedAppsStr?.split(',') ?? [];
       setState(() {
         _isModeActive = true;
         _remainingSeconds = int.tryParse(remaining ?? "0") ?? 0;
@@ -94,17 +101,33 @@ class _ModeFunctionScreenState extends State<ModeFunctionScreen> {
 
   void _startCountdownTimer() {
     _countdownTimer?.cancel();
-    _countdownTimer = Timer.periodic(Duration(seconds: 1), (timer) async {
-      if (_remainingSeconds > 0) {
+    _countdownTimer =
+        Timer.periodic(Duration(seconds: 1), (_) => _updateRemainingTime());
+  }
+
+  void _updateRemainingTime() async {
+    String? start = await _secureStorage.read(key: "focusStartTime");
+    String? durationStr = await _secureStorage.read(key: "focusDuration");
+
+    if (start != null && durationStr != null) {
+      int startTime = int.parse(start);
+      int duration = int.parse(durationStr); // in seconds
+      int elapsed =
+          ((DateTime.now().millisecondsSinceEpoch - startTime) / 1000).floor();
+      int remaining = duration - elapsed;
+
+      if (remaining <= 0) {
         setState(() {
-          _remainingSeconds--;
+          _remainingSeconds = 0;
+          _isModeActive = false;
         });
-        _saveModeState();
+        await _clearModeState();
       } else {
-        timer.cancel();
-        await _stopFocusMode();
+        setState(() {
+          _remainingSeconds = remaining;
+        });
       }
-    });
+    }
   }
 
   void _showTimePicker() {
@@ -194,6 +217,10 @@ class _ModeFunctionScreenState extends State<ModeFunctionScreen> {
       );
       return;
     }
+    final now = DateTime.now().millisecondsSinceEpoch;
+    await _secureStorage.write(key: "focusStartTime", value: now.toString());
+    await _secureStorage.write(
+        key: "focusDuration", value: _selectedDuration.inSeconds.toString());
 
     List<String> blockedApps = _selectedApps.entries
         .where((entry) => entry.value)
@@ -205,7 +232,8 @@ class _ModeFunctionScreenState extends State<ModeFunctionScreen> {
       );
       return;
     }
-
+    await _secureStorage.write(
+        key: "blockedApps", value: blockedApps.join(','));
     String? password = await _askPassword();
     if (password == null || password.isEmpty) return;
 
@@ -361,8 +389,9 @@ class _ModeFunctionScreenState extends State<ModeFunctionScreen> {
                 Positioned(
                   right: 0,
                   child: IconButton(
-                    icon: const Icon(Icons.edit, color: Colors.blue),
-                    onPressed: _showTimePicker,
+                    icon: Icon(Icons.edit,
+                        color: _isModeActive ? Colors.grey : Colors.blue),
+                    onPressed: _isModeActive ? null : _showTimePicker,
                   ),
                 ),
               ],
