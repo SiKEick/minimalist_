@@ -6,7 +6,7 @@ import android.content.pm.PackageManager;
 import android.graphics.drawable.Drawable;
 import android.os.Bundle;
 import android.text.TextUtils;
-import android.util.Log;  // ✅ Added for debugging
+import android.util.Log;
 import android.view.WindowManager;
 import android.widget.Button;
 import android.widget.EditText;
@@ -16,13 +16,19 @@ import android.widget.Toast;
 
 import androidx.appcompat.app.AppCompatActivity;
 
+import java.util.HashSet;
+import java.util.Set;
+
 public class LockActivity extends AppCompatActivity {
 
     public static final String EXTRA_PASSWORD = "password";
-    public static final String EXTRA_PACKAGE_NAME = "packageName"; // Consistent with service
+    public static final String EXTRA_PACKAGE_NAME = "packageName";
     public static final String ACTION_FOCUS_MODE_UNLOCKED = "com.example.minimalist_text2.FOCUS_MODE_UNLOCKED";
 
     public static volatile boolean isShowing = false;
+
+    // ✅ Track permanently unlocked apps for this session
+    public static final Set<String> permanentlyUnlockedApps = new HashSet<>();
 
     private String correctPassword;
     private String targetPackage;
@@ -96,14 +102,19 @@ public class LockActivity extends AppCompatActivity {
                 return;
             }
             if (entered.equals(correctPassword)) {
-                Log.d("LockActivity", "Password correct. Unlocking app.");
+                Log.d("LockActivity", "Password correct. Unlocking app permanently for this session.");
 
-                // Send broadcast for grace period
+                // ✅ Add this app to permanently unlocked list
+                if (!TextUtils.isEmpty(targetPackage)) {
+                    permanentlyUnlockedApps.add(targetPackage);
+                }
+
+                // Notify service (optional, for consistency)
                 Intent unlocked = new Intent(ACTION_FOCUS_MODE_UNLOCKED);
                 unlocked.putExtra("packageName", targetPackage);
                 sendBroadcast(unlocked);
 
-                Toast.makeText(this, "Unlocked", Toast.LENGTH_SHORT).show();
+                Toast.makeText(this, "Unlocked permanently for this session", Toast.LENGTH_SHORT).show();
                 finish();
             } else {
                 Log.d("LockActivity", "Incorrect password entered.");
@@ -122,11 +133,11 @@ public class LockActivity extends AppCompatActivity {
 
     @Override
     public void onBackPressed() {
-        Log.d("LockActivity", "Back pressed. Redirecting to home screen.");
-        // Block going back to blocked app
-        Intent home = new Intent(Intent.ACTION_MAIN);
-        home.addCategory(Intent.CATEGORY_HOME);
-        home.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-        startActivity(home);
+    }
+
+
+    // ✅ Helper to reset when session ends
+    public static void resetUnlockedApps() {
+        permanentlyUnlockedApps.clear();
     }
 }

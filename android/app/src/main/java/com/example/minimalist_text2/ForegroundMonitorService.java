@@ -4,30 +4,23 @@ import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.Service;
-import android.app.usage.UsageEvents;
+import android.app.usage.UsageStats;
 import android.app.usage.UsageStatsManager;
+import android.content.Context;
 import android.content.Intent;
 import android.os.Build;
 import android.os.Handler;
 import android.os.IBinder;
 import android.util.Log;
 import android.app.ActivityManager;
-import android.app.ActivityManager.RunningAppProcessInfo;
-import java.util.List;
-import android.content.Context;
-import java.util.Iterator;
-import android.app.ActivityManager.RunningServiceInfo;
-import android.app.usage.UsageStats;
-import android.app.usage.UsageStatsManager;
-
-import java.util.SortedMap;
-import java.util.TreeMap;
-
 
 import androidx.annotation.Nullable;
 import androidx.core.app.NotificationCompat;
 
 import java.util.ArrayList;
+import java.util.List;
+import java.util.SortedMap;
+import java.util.TreeMap;
 
 public class ForegroundMonitorService extends Service {
     private static final String CHANNEL_ID = "FocusModeServiceChannel";
@@ -77,16 +70,21 @@ public class ForegroundMonitorService extends Service {
             Log.d(TAG, "Foreground App: " + foregroundApp);
 
             if (blockedApps != null && blockedApps.contains(foregroundApp)) {
-                Log.d(TAG, "Blocked app detected: " + foregroundApp);
-
-                if (!foregroundApp.equals(lastLockedApp)) {
+                // Skip if permanently unlocked
+                if (LockActivity.permanentlyUnlockedApps.contains(foregroundApp)) {
+                    Log.d(TAG, "App " + foregroundApp + " is permanently unlocked for this session. Skipping lock.");
+                } else if (!foregroundApp.equals(lastLockedApp) || !LockActivity.isShowing) {
+                    // ✅ Launch LockActivity if not already showing
                     Log.d(TAG, "Launching LockActivity for: " + foregroundApp);
                     lastLockedApp = foregroundApp;
 
                     Intent lockIntent = new Intent(this, LockActivity.class);
                     lockIntent.putExtra("password", password);
                     lockIntent.putExtra(LockActivity.EXTRA_PACKAGE_NAME, foregroundApp);
-                    lockIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+                    lockIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK
+                            | Intent.FLAG_ACTIVITY_CLEAR_TASK // ensure blocked app cannot be accessed
+                            | Intent.FLAG_ACTIVITY_NO_HISTORY); // prevent back stack
+
                     startActivity(lockIntent);
                 }
             } else {
@@ -100,23 +98,28 @@ public class ForegroundMonitorService extends Service {
         }, 2000);
     }
 
+
     private String getForegroundApp() {
         String currentApp = "NULL";
-        if(android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
             UsageStatsManager usm = (UsageStatsManager) this.getSystemService(Context.USAGE_STATS_SERVICE);
             long time = System.currentTimeMillis();
-            List<UsageStats> appList = usm.queryUsageStats(UsageStatsManager.INTERVAL_DAILY,  time - 1000*1000, time);
+            List<UsageStats> appList = usm.queryUsageStats(
+                    UsageStatsManager.INTERVAL_DAILY,
+                    time - 1000 * 1000,
+                    time
+            );
             if (appList != null && appList.size() > 0) {
-                SortedMap<Long, UsageStats> mySortedMap = new TreeMap<Long, UsageStats>();
+                SortedMap<Long, UsageStats> mySortedMap = new TreeMap<>();
                 for (UsageStats usageStats : appList) {
                     mySortedMap.put(usageStats.getLastTimeUsed(), usageStats);
                 }
-                if (mySortedMap != null && !mySortedMap.isEmpty()) {
+                if (!mySortedMap.isEmpty()) {
                     currentApp = mySortedMap.get(mySortedMap.lastKey()).getPackageName();
                 }
             }
         } else {
-            ActivityManager am = (ActivityManager)this.getSystemService(Context.ACTIVITY_SERVICE);
+            ActivityManager am = (ActivityManager) this.getSystemService(Context.ACTIVITY_SERVICE);
             List<ActivityManager.RunningAppProcessInfo> tasks = am.getRunningAppProcesses();
             currentApp = tasks.get(0).processName;
         }
@@ -124,8 +127,6 @@ public class ForegroundMonitorService extends Service {
         Log.e(TAG, "Current App in foreground is: " + currentApp);
         return currentApp;
     }
-
-
 
     private Notification getNotification() {
         return new NotificationCompat.Builder(this, CHANNEL_ID)
@@ -158,6 +159,10 @@ public class ForegroundMonitorService extends Service {
     public void onDestroy() {
         handler.removeCallbacksAndMessages(null);
         Log.d(TAG, "Service destroyed");
+
+        // ✅ Reset unlocked apps for next session
+        LockActivity.resetUnlockedApps();
+
         super.onDestroy();
     }
 }
