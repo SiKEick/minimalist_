@@ -1,48 +1,77 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    android:orientation="vertical"
+    android:id="@+id/lockRoot"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:gravity="center"
-    android:background="#000"
-    android:padding="24dp">
+    android:orientation="vertical"
+    android:gravity="center_horizontal"
+    android:padding="24dp"
+    android:background="@android:color/black">
 
+    <!-- Blocked app info -->
     <ImageView
         android:id="@+id/appIcon"
-        android:layout_width="80dp"
-        android:layout_height="80dp"
-        android:layout_gravity="center" />
+        android:layout_width="72dp"
+        android:layout_height="72dp"
+        android:layout_marginBottom="12dp"
+        android:contentDescription="App icon" />
 
     <TextView
         android:id="@+id/appName"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:text="App Name"
-        android:textColor="#FFF"
-        android:textSize="22sp"
-        android:layout_marginTop="16dp" />
+        android:textColor="@android:color/white"
+        android:textSize="20sp"
+        android:textStyle="bold"
+        android:layout_marginBottom="8dp" />
 
     <TextView
         android:id="@+id/subtitle"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="Enter your password to continue"
-        android:textColor="#AAA"
-        android:layout_marginTop="8dp" />
+        android:text="Verify your phone number to unlock"
+        android:textColor="@android:color/darker_gray"
+        android:textSize="14sp"
+        android:layout_marginBottom="24dp" />
 
+    <!-- Phone number input -->
     <EditText
-        android:id="@+id/passwordInput"
+        android:id="@+id/phoneInput"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:hint="Password"
-        android:textColor="#FFF"
-        android:inputType="textPassword"
-        android:layout_marginTop="16dp" />
+        android:hint="Enter phone (+1...)"
+        android:inputType="phone"
+        android:background="@android:drawable/edit_text"
+        android:padding="12dp"
+        android:textColor="@android:color/white"
+        android:textColorHint="@android:color/darker_gray"
+        android:layout_marginBottom="12dp" />
 
     <Button
-        android:id="@+id/unlockButton"
+        android:id="@+id/sendOtpButton"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Unlock"
-        android:layout_marginTop="16dp" />
+        android:text="Send OTP"
+        android:layout_marginBottom="16dp" />
+
+    <!-- OTP input -->
+    <EditText
+        android:id="@+id/otpInput"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:hint="Enter OTP"
+        android:inputType="number"
+        android:background="@android:drawable/edit_text"
+        android:padding="12dp"
+        android:textColor="@android:color/white"
+        android:textColorHint="@android:color/darker_gray"
+        android:layout_marginBottom="12dp" />
+
+    <Button
+        android:id="@+id/verifyOtpButton"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Verify &amp; Unlock" />
+
 </LinearLayout>

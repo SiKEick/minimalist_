@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "769471232198",
+    "project_id": "minimalist-fac2f",
+    "storage_bucket": "minimalist-fac2f.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:769471232198:android:a1fea65c4ea095726f7fc7",
+        "android_client_info": {
+          "package_name": "com.example.minimalist_text2"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyD4WioFE7YbyacbUgNrgyxiLV6-ASUsQHI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

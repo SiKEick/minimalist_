@@ -8,7 +8,16 @@ import io.flutter.plugin.common.MethodChannel;
 import android.app.usage.UsageEvents;
 import android.provider.Settings;
 import android.net.Uri;
+import com.google.firebase.FirebaseException;
 
+
+import com.google.firebase.FirebaseApp;
+import com.google.firebase.auth.FirebaseAuth;
+import com.google.firebase.auth.PhoneAuthCredential;
+import com.google.firebase.auth.PhoneAuthOptions;
+import com.google.firebase.auth.PhoneAuthProvider;
+
+import java.util.concurrent.TimeUnit;
 import android.app.AppOpsManager;
 import android.app.usage.UsageStats;
 import android.app.usage.UsageStatsManager;
@@ -47,13 +56,18 @@ public class MainActivity extends FlutterActivity {
     private static final String CHANNEL = "com.example.app/usage";
     private static final String PREFS_NAME = "PickupPrefs";
     private static final String PICKUP_COUNT_KEY = "pickup_count";
-    private static final String FOCUS_CHANNEL = "focus_mode_channel";
     private static final String OVERLAY_CHANNEL = "overlay_permission_channel";
     private static final int REQUEST_OVERLAY_PERMISSION = 1001;
-
+    private static final String FOCUS_CHANNEL = "focus_mode_channel";
+    public static MethodChannel focusChannel;
+    private FirebaseAuth mAuth;
+    private String storedVerificationId;
     @Override
     public void configureFlutterEngine(@NonNull FlutterEngine flutterEngine) {
         super.configureFlutterEngine(flutterEngine);
+        FirebaseApp.initializeApp(this);
+        mAuth = FirebaseAuth.getInstance();
+
 
 
         new MethodChannel(flutterEngine.getDartExecutor().getBinaryMessenger(), CHANNEL).setMethodCallHandler(
@@ -111,12 +125,10 @@ public class MainActivity extends FlutterActivity {
         new MethodChannel(flutterEngine.getDartExecutor().getBinaryMessenger(), FOCUS_CHANNEL)
                 .setMethodCallHandler((call, result) -> {
                     if (call.method.equals("startFocusMode")) {
-                        String password = call.argument("password");
                         ArrayList<String> blockedApps = call.argument("blockedApps");
                         int durationInSeconds = call.argument("duration");
 
                         Intent serviceIntent = new Intent(this, ForegroundMonitorService.class);
-                        serviceIntent.putExtra("password", password);
                         serviceIntent.putStringArrayListExtra("blockedApps", blockedApps);
                         serviceIntent.putExtra("duration", durationInSeconds);
 
@@ -126,10 +138,24 @@ public class MainActivity extends FlutterActivity {
                             startService(serviceIntent);
                         }
                         result.success(true);
+
+                    } else if (call.method.equals("stopFocusMode")) { // 🔥 ADDED
+                        // Launch LockActivity for OTP verification
+
+                        Intent lockIntent = new Intent(this, LockActivity.class);
+                        lockIntent.putExtra("mode", "stop_session");
+                        lockIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                        startActivity(lockIntent);
+                        result.success(true);
+
                     } else {
                         result.notImplemented();
                     }
                 });
+        focusChannel = new MethodChannel(
+                flutterEngine.getDartExecutor().getBinaryMessenger(),
+                FOCUS_CHANNEL
+        );
         new MethodChannel(flutterEngine.getDartExecutor().getBinaryMessenger(), OVERLAY_CHANNEL)
                 .setMethodCallHandler((call, result) -> {
                     if (call.method.equals("hasOverlayPermission")) {
@@ -152,9 +178,70 @@ public class MainActivity extends FlutterActivity {
                         result.notImplemented();
                     }
                 });
+        new MethodChannel(flutterEngine.getDartExecutor().getBinaryMessenger(), "otp_channel")
+                .setMethodCallHandler((call, result) -> {
+                    if (call.method.equals("sendOTP")) {
+                        String phoneNumber = call.argument("phone");
+                        sendOTP(phoneNumber, result);
+                    } else if (call.method.equals("verifyOTP")) {
+                        String verificationId = call.argument("verificationId");
+                        String otp = call.argument("otp");
+                        verifyOTP(verificationId, otp, result);
+                    } else {
+                        result.notImplemented();
+                    }
+                });
 
 
     }
+
+    public static void notifyFlutterStop() {
+        if (focusChannel != null) {
+            focusChannel.invokeMethod("onFocusModeStopped", null);
+        }
+    }
+
+
+    private void sendOTP(String phoneNumber, MethodChannel.Result result) {
+        PhoneAuthOptions options =
+                PhoneAuthOptions.newBuilder(mAuth)
+                        .setPhoneNumber(phoneNumber)
+                        .setTimeout(60L, TimeUnit.SECONDS)
+                        .setActivity(this)
+                        .setCallbacks(new PhoneAuthProvider.OnVerificationStateChangedCallbacks() {
+                            @Override
+                            public void onVerificationCompleted(PhoneAuthCredential credential) {
+                                result.success("auto_verified"); // auto-verification (rare)
+                            }
+
+                            @Override
+                            public void onVerificationFailed(@NonNull FirebaseException e) {
+                                result.error("OTP_FAILED", e.getMessage(), null);
+                            }
+
+                            @Override
+                            public void onCodeSent(String verificationId,
+                                                   PhoneAuthProvider.ForceResendingToken token) {
+                                storedVerificationId = verificationId;
+                                result.success(verificationId); // send this back to Flutter/Java
+                            }
+                        })
+                        .build();
+        PhoneAuthProvider.verifyPhoneNumber(options);
+    }
+
+    private void verifyOTP(String verificationId, String otp, MethodChannel.Result result) {
+        PhoneAuthCredential credential = PhoneAuthProvider.getCredential(verificationId, otp);
+        mAuth.signInWithCredential(credential)
+                .addOnCompleteListener(task -> {
+                    if (task.isSuccessful()) {
+                        result.success("verified");
+                    } else {
+                        result.error("INVALID_OTP", "Verification failed", null);
+                    }
+                });
+    }
+
     private boolean hasOverlayPermission() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             return Settings.canDrawOverlays(this);

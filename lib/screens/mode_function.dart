@@ -26,7 +26,6 @@ class _ModeFunctionScreenState extends State<ModeFunctionScreen> {
   bool _isModeActive = false;
   int _remainingSeconds = 0;
   Timer? _countdownTimer;
-  String? _savedPassword;
 
   TextEditingController _searchController = TextEditingController();
   String _searchQuery = "";
@@ -37,6 +36,22 @@ class _ModeFunctionScreenState extends State<ModeFunctionScreen> {
     _getInstalledApps();
     _loadModeState();
     _updateRemainingTime();
+    _platform.setMethodCallHandler((call) async {
+      if (call.method == "onFocusModeStopped") {
+        setState(() {
+          _isModeActive = false;
+          _remainingSeconds = 0;
+        });
+        _countdownTimer?.cancel();
+        await _clearModeState();
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("Focus Mode Stopped.")),
+          );
+        }
+      }
+    });
   }
 
   Future<void> _getInstalledApps() async {
@@ -72,13 +87,12 @@ class _ModeFunctionScreenState extends State<ModeFunctionScreen> {
     String? active = await _secureStorage.read(key: "isModeActive");
     if (active == "true") {
       String? remaining = await _secureStorage.read(key: "remainingTime");
-      String? password = await _secureStorage.read(key: "focus_password");
+
       String? blockedAppsStr = await _secureStorage.read(key: "blockedApps");
       List<String> blockedApps = blockedAppsStr?.split(',') ?? [];
       setState(() {
         _isModeActive = true;
         _remainingSeconds = int.tryParse(remaining ?? "0") ?? 0;
-        _savedPassword = password;
       });
       if (_remainingSeconds > 0) {
         _startCountdownTimer();
@@ -96,13 +110,41 @@ class _ModeFunctionScreenState extends State<ModeFunctionScreen> {
   Future<void> _clearModeState() async {
     await _secureStorage.delete(key: "isModeActive");
     await _secureStorage.delete(key: "remainingTime");
-    await _secureStorage.delete(key: "focus_password");
+    await _secureStorage.delete(key: "focusStartTime");
+    await _secureStorage.delete(key: "focusDuration");
+    await _secureStorage.delete(key: "blockedApps");
   }
 
   void _startCountdownTimer() {
     _countdownTimer?.cancel();
     _countdownTimer =
         Timer.periodic(Duration(seconds: 1), (_) => _updateRemainingTime());
+  }
+
+  Future<void> _confirmStartFocusMode() async {
+    bool? confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text("Start Focus Mode"),
+          content: const Text("Do you want to start Focus Mode?"),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text("No"),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text("Yes"),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirm == true) {
+      _startFocusMode();
+    }
   }
 
   void _updateRemainingTime() async {
@@ -234,15 +276,9 @@ class _ModeFunctionScreenState extends State<ModeFunctionScreen> {
     }
     await _secureStorage.write(
         key: "blockedApps", value: blockedApps.join(','));
-    String? password = await _askPassword();
-    if (password == null || password.isEmpty) return;
-
-    await _secureStorage.write(key: "focus_password", value: password);
-
     setState(() {
       _isModeActive = true;
       _remainingSeconds = _selectedDuration.inSeconds;
-      _savedPassword = password;
     });
 
     _saveModeState();
@@ -250,7 +286,6 @@ class _ModeFunctionScreenState extends State<ModeFunctionScreen> {
 
     try {
       await _platform.invokeMethod('startFocusMode', {
-        'password': password,
         'blockedApps': blockedApps,
         'duration': _selectedDuration.inSeconds,
       });
@@ -263,87 +298,12 @@ class _ModeFunctionScreenState extends State<ModeFunctionScreen> {
   }
 
   Future<void> _stopFocusMode() async {
-    TextEditingController controller = TextEditingController();
-
-    String? enteredPassword = await showDialog<String>(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: const Text("Enter Password to Stop"),
-          content: TextField(
-            controller: controller,
-            obscureText: true,
-            decoration: const InputDecoration(hintText: "Enter your password"),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text("Cancel"),
-            ),
-            TextButton(
-              onPressed: () {
-                Navigator.pop(context, controller.text);
-              },
-              child: const Text("OK"),
-            ),
-          ],
-        );
-      },
-    );
-
-    if (enteredPassword == null || enteredPassword.isEmpty) return;
-
-    if (enteredPassword == _savedPassword) {
-      setState(() {
-        _isModeActive = false;
-        _remainingSeconds = 0;
-        _savedPassword = null;
-      });
-      _countdownTimer?.cancel();
-      await _clearModeState();
-
-      try {
-        await _platform.invokeMethod('stopFocusMode');
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Focus Mode Stopped.")),
-        );
-      } catch (e) {
-        print("Error stopping focus mode: $e");
-      }
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Incorrect password!")),
-      );
+    try {
+      await _platform.invokeMethod('stopFocusMode');
+      // Native will handle OTP & send "onFocusModeStopped" back
+    } catch (e) {
+      print("Error stopping focus mode: $e");
     }
-  }
-
-  Future<String?> _askPassword() async {
-    TextEditingController controller = TextEditingController();
-    return showDialog<String>(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: const Text("Set Focus Mode Password"),
-          content: TextField(
-            controller: controller,
-            obscureText: true,
-            decoration: const InputDecoration(hintText: "Enter password"),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text("Cancel"),
-            ),
-            TextButton(
-              onPressed: () {
-                Navigator.pop(context, controller.text);
-              },
-              child: const Text("OK"),
-            ),
-          ],
-        );
-      },
-    );
   }
 
   String _formatTime(int totalSeconds) {
@@ -495,7 +455,7 @@ class _ModeFunctionScreenState extends State<ModeFunctionScreen> {
                     child: const Text("Stop Focus Mode"),
                   )
                 : ElevatedButton(
-                    onPressed: _startFocusMode,
+                    onPressed: _confirmStartFocusMode, // ✅ use confirm dialog
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.blue,
                       padding: const EdgeInsets.symmetric(
@@ -509,4 +469,5 @@ class _ModeFunctionScreenState extends State<ModeFunctionScreen> {
     );
   }
 }
+
 //hi

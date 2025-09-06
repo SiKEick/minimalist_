@@ -11,6 +11,10 @@ import android.content.Intent;
 import android.os.Build;
 import android.os.Handler;
 import android.os.IBinder;
+import android.content.BroadcastReceiver;
+import android.content.IntentFilter;
+import com.google.firebase.FirebaseException;
+
 import android.util.Log;
 import android.app.ActivityManager;
 
@@ -25,9 +29,10 @@ import java.util.TreeMap;
 public class ForegroundMonitorService extends Service {
     private static final String CHANNEL_ID = "FocusModeServiceChannel";
     private static final String TAG = "FocusModeService";
+    private boolean isFocusModeActive = true;
 
     private ArrayList<String> blockedApps;  // PACKAGE NAMES
-    private String password;
+
     private long endTimeMillis;
     private Handler handler = new Handler();
 
@@ -38,18 +43,28 @@ public class ForegroundMonitorService extends Service {
         super.onCreate();
         Log.d(TAG, "Service created");
         createNotificationChannel();
+        IntentFilter filter = new IntentFilter(LockActivity.ACTION_FOCUS_MODE_STOP);
+        registerReceiver(stopReceiver, filter);
     }
+    private final BroadcastReceiver stopReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            if (LockActivity.ACTION_FOCUS_MODE_STOP.equals(intent.getAction())) {
+                Log.d(TAG, "Stop session broadcast received -> stopping service");
+                handler.removeCallbacksAndMessages(null); // ✅ add this
+                stopSelf();
+            }
+        }
+    };
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
         blockedApps = intent.getStringArrayListExtra("blockedApps");
-        password = intent.getStringExtra("password");
         int durationSeconds = intent.getIntExtra("duration", 0);
         endTimeMillis = System.currentTimeMillis() + (durationSeconds * 1000);
 
         Log.d(TAG, "Service started");
         Log.d(TAG, "Blocked Apps: " + blockedApps);
-        Log.d(TAG, "Password: " + password);
         Log.d(TAG, "Duration (seconds): " + durationSeconds);
 
         startForeground(1, getNotification());
@@ -79,7 +94,6 @@ public class ForegroundMonitorService extends Service {
                     lastLockedApp = foregroundApp;
 
                     Intent lockIntent = new Intent(this, LockActivity.class);
-                    lockIntent.putExtra("password", password);
                     lockIntent.putExtra(LockActivity.EXTRA_PACKAGE_NAME, foregroundApp);
                     lockIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK
                             | Intent.FLAG_ACTIVITY_CLEAR_TASK // ensure blocked app cannot be accessed
@@ -159,10 +173,10 @@ public class ForegroundMonitorService extends Service {
     public void onDestroy() {
         handler.removeCallbacksAndMessages(null);
         Log.d(TAG, "Service destroyed");
-
+        unregisterReceiver(stopReceiver);
         // ✅ Reset unlocked apps for next session
         LockActivity.resetUnlockedApps();
-
+        MainActivity.notifyFlutterStop();
         super.onDestroy();
     }
 }
