@@ -51,7 +51,7 @@
             android:id="@+id/phoneInput"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:hint="+91 Phone number"
+            android:text="+91 "
             android:inputType="phone"
             android:padding="12dp"
             android:background="@drawable/rounded_edittext"
