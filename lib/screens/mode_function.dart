@@ -452,7 +452,13 @@ class _ModeFunctionScreenState extends State<ModeFunctionScreen> {
                       padding: const EdgeInsets.symmetric(
                           horizontal: 40, vertical: 15),
                     ),
-                    child: const Text("Stop Focus Mode"),
+                    child: const Text(
+                      "Stop Focus Mode",
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                   )
                 : ElevatedButton(
                     onPressed: _confirmStartFocusMode, // ✅ use confirm dialog
@@ -461,8 +467,14 @@ class _ModeFunctionScreenState extends State<ModeFunctionScreen> {
                       padding: const EdgeInsets.symmetric(
                           horizontal: 40, vertical: 15),
                     ),
-                    child: const Text("Start Focus Mode"),
-                  ),
+                    child: const Text(
+                      "Start Focus Mode",
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  )
           ],
         ),
       ),
